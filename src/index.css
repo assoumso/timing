@@ -1,0 +1,82 @@
+@import "tailwindcss";
+
+@media print {
+  /* Enforce A4 landscape format */
+  @page {
+    size: A4 landscape;
+    margin: 12mm 15mm 12mm 15mm;
+  }
+
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 11px !important;
+  }
+
+  /* Force background colors and borders in browsers */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    box-shadow: none !important;
+  }
+
+  /* Hide headers, footers, interactive elements, forms, assistant and widgets */
+  header,
+  footer,
+  aside,
+  nav,
+  .no-print,
+  button,
+  select,
+  input,
+  #ai-assistant-drawer,
+  .fixed,
+  .absolute {
+    display: none !important;
+  }
+
+  /* Standard print-only section */
+  .print-only {
+    display: block !important;
+  }
+
+  /* Outer spacing and alignment */
+  main {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    background: transparent !important;
+  }
+
+  /* Force print table borders to be visible and solid */
+  table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+    page-break-inside: avoid !important;
+  }
+
+  th, td {
+    border: 1px solid #94a3b8 !important; /* border-slate-400 */
+    padding: 6px 8px !important;
+    font-size: 11px !important;
+    color: #000000 !important;
+    background-color: transparent !important;
+  }
+
+  th {
+    background-color: #f1f5f9 !important; /* bg-slate-100 */
+    font-weight: 700 !important;
+  }
+
+  /* Clean up card representations */
+  .print-card-border {
+    border: 1px solid #cbd5e1 !important;
+    background-color: #f8fafc !important;
+    margin-top: 4px;
+    padding: 6px !important;
+    border-radius: 4px !important;
+  }
+}

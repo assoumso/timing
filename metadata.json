@@ -1,0 +1,6 @@
+{
+  "name": "Générateur d'Emploi du Temps",
+  "description": "Générateur d'emplois du temps scolaires complet pour écoles et enseignants, incluant un tableau de bord intuitif de gestion des conflits en temps réel et ordonnancement I.A. par Gemini.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
