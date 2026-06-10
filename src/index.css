@@ -43,16 +43,25 @@
     display: block !important;
   }
 
-  /* ── Zone principale : pleine largeur sans marges ── */
+  /* ── Zone principale : pleine largeur sans marges et reset flexbox/overflow ── */
   body > #root,
-  main {
+  body > #root > div,
+  body > #root > div > div,
+  main,
+  .space-y-6,
+  .print\:space-y-0 {
     display: block !important;
     width: 100% !important;
     max-width: 100% !important;
+    height: auto !important;
+    min-height: auto !important;
+    max-height: none !important;
     margin: 0 !important;
     padding: 0 !important;
     overflow: visible !important;
     background: transparent !important;
+    flex: none !important;
+    position: relative !important;
   }
 
   /* ── Conteneur du tableau ── */
@@ -61,6 +70,9 @@
     border: none !important;
     padding: 0 !important;
     border-radius: 0 !important;
+    display: block !important;
+    height: auto !important;
+    position: relative !important;
   }
 
   /* ── Tableau : tenir sur une seule page ── */
