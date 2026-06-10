@@ -134,4 +134,10 @@
   .space-y-6 > * + * {
     margin-top: 0 !important;
   }
+
+  /* ── Saut de page pour multi-sélection cohérente ── */
+  .print-page-break {
+    page-break-before: always !important;
+    break-before: page !important;
+  }
 }

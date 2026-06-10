@@ -586,7 +586,7 @@ export default function App() {
   };
 
   // Open planning modal for specific slot
-  const handleOpenSlotModal = (dayId: string, slotId: string, existingCourse?: ScheduleCourse) => {
+  const handleOpenSlotModal = (dayId: string, slotId: string, existingCourse?: ScheduleCourse, filterContextId?: string) => {
     setModalTargetDay(dayId);
     setModalTargetSlot(slotId);
     
@@ -599,12 +599,12 @@ export default function App() {
     } else {
       setEditingCourseId(null);
       // Try to pre-fill logically based on current filter state
-      setModalClassId(calendarFilterType === 'class' ? (selectedFilterValue[0] || classes[0]?.id || '') : (classes[0]?.id || ''));
-      setModalTeacherId(calendarFilterType === 'teacher' ? (selectedFilterValue[0] || teachers[0]?.id || '') : (teachers[0]?.id || ''));
-      setModalRoomId(calendarFilterType === 'room' ? (selectedFilterValue[0] || rooms[0]?.id || '') : (rooms[0]?.id || ''));
+      setModalClassId(calendarFilterType === 'class' ? (filterContextId || selectedFilterValue[0] || classes[0]?.id || '') : (classes[0]?.id || ''));
+      setModalTeacherId(calendarFilterType === 'teacher' ? (filterContextId || selectedFilterValue[0] || teachers[0]?.id || '') : (teachers[0]?.id || ''));
+      setModalRoomId(calendarFilterType === 'room' ? (filterContextId || selectedFilterValue[0] || rooms[0]?.id || '') : (rooms[0]?.id || ''));
       setModalSubjectId(subjects[0]?.id || '');
     }
-
+ 
     setIsAddEditCourseModalOpen(true);
   };
 
@@ -1425,187 +1425,224 @@ export default function App() {
                         <Printer className="h-4 w-4 text-emerald-400" />
                         <span>Imprimer en A4 Landscape</span>
                       </button>
-
                       <div className="text-xs text-slate-500 font-semibold italic flex items-center gap-1 bg-indigo-550/10 text-indigo-900 border border-indigo-150 rounded-xl px-3 py-1.5">
                         <Info className="h-3.5 w-3.5 shrink-0" />
                         <span>Cliquez sur une heure pour planifier.</span>
                       </div>
                     </div>
                   </div>
- 
+
                   {/* Dynamic schedule grid display */}
-                  <div className="bg-white border border-slate-200 rounded-3xl p-4 md:p-6 shadow-sm overflow-x-auto print:border-none print:p-0 print:shadow-none">
-                    
-                    {/* Header d'impression professionnel visible uniquement sur l'impression papier A4 */}
-                    <div className="hidden print:block mb-6 border-b-2 border-slate-900 pb-4">
-                      <div className="flex justify-between items-end">
-                        <div className="space-y-1">
-                          <div className="text-[10px] text-indigo-600 font-extrabold tracking-widest uppercase">
-                            {schoolName} — {schoolSubName}
+                  <div className="space-y-6 print:space-y-0">
+                    {selectedFilterValue.map((singleFilter, idx) => {
+                      const matchedCourses = (() => {
+                        if (calendarFilterType === 'class') {
+                          return courses.filter(c => c.classId === singleFilter);
+                        } else if (calendarFilterType === 'teacher') {
+                          return courses.filter(c => c.teacherId === singleFilter);
+                        } else {
+                          return courses.filter(c => c.roomId === singleFilter);
+                        }
+                      })();
+
+                      const titleLabel = (() => {
+                        if (calendarFilterType === 'class') {
+                          return `Classe de ${classes.find(c => c.id === singleFilter)?.name || singleFilter}`;
+                        } else if (calendarFilterType === 'teacher') {
+                          return `Enseignant : ${teachers.find(t => t.id === singleFilter)?.name || singleFilter}`;
+                        } else {
+                          return `Salle : ${rooms.find(r => r.id === singleFilter)?.name || singleFilter}`;
+                        }
+                      })();
+
+                      return (
+                        <div 
+                          key={singleFilter} 
+                          className={`bg-white border border-slate-200 rounded-3xl p-4 md:p-6 shadow-sm overflow-x-auto print:border-none print:p-0 print:shadow-none ${
+                            idx > 0 ? 'print-page-break mt-6 print:mt-0' : ''
+                          }`}
+                        >
+                          {/* Title block on screen (to see which grid it is if multiple classes are selected) */}
+                          {selectedFilterValue.length > 1 && (
+                            <div className="mb-4 pb-2 border-b border-slate-100 flex justify-between items-center no-print">
+                              <span className="text-xs font-black text-indigo-950 uppercase tracking-wide bg-indigo-50 px-3 py-1.5 rounded-xl border border-indigo-100">
+                                {titleLabel}
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Header d'impression professionnel visible uniquement sur l'impression papier A4 */}
+                          <div className="hidden print:block mb-6 border-b-2 border-slate-900 pb-4">
+                            <div className="flex justify-between items-end">
+                              <div className="space-y-1">
+                                <div className="text-[10px] text-indigo-600 font-extrabold tracking-widest uppercase">
+                                  {schoolName} — {schoolSubName}
+                                </div>
+                                <h1 className="text-2xl font-black text-slate-950 uppercase tracking-tight">
+                                  {calendarFilterType === 'class' && `Emploi du Temps : ${titleLabel}`}
+                                  {calendarFilterType === 'teacher' && `Emploi du Temps : ${titleLabel}`}
+                                  {calendarFilterType === 'room' && `Affectation : ${titleLabel}`}
+                                </h1>
+                                <p className="text-xs text-slate-600 font-semibold">
+                                  Fiche d'apprentissage officielle de l'établissement scolaire — Année Académique {academicYear}
+                                </p>
+                              </div>
+                              <div className="text-right">
+                                <span className="text-[10.5px] font-bold text-slate-900 block bg-slate-100 px-3 py-1 rounded-md border border-slate-200">
+                                  Fiche d'affichage A4 officielle
+                                </span>
+                                <span className="text-[9px] text-slate-400 font-mono block mt-1.5 leading-none">
+                                  Généré et imprimé le {new Date().toLocaleDateString('fr-FR')}
+                                </span>
+                              </div>
+                            </div>
                           </div>
-                          <h1 className="text-2xl font-black text-slate-950 uppercase tracking-tight">
-                            {calendarFilterType === 'class' && `Emploi du Temps : ${selectedFilterValue.length > 1 ? `${selectedFilterValue.length} Classes` : `Classe de ${classes.find(c => c.id === selectedFilterValue[0])?.name || selectedFilterValue[0]}`}`}
-                            {calendarFilterType === 'teacher' && `Emploi du Temps : ${selectedFilterValue.length > 1 ? `${selectedFilterValue.length} Enseignants` : `Enseignant : ${teachers.find(t => t.id === selectedFilterValue[0])?.name || selectedFilterValue[0]}`}`}
-                            {calendarFilterType === 'room' && `Affectation : ${selectedFilterValue.length > 1 ? `${selectedFilterValue.length} Salles` : `Salle : ${rooms.find(r => r.id === selectedFilterValue[0])?.name || selectedFilterValue[0]}`}`}
-                          </h1>
-                          <p className="text-xs text-slate-600 font-semibold">
-                            Fiche d'apprentissage officielle de l'établissement scolaire — Année Académique {academicYear}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <span className="text-[10.5px] font-bold text-slate-900 block bg-slate-100 px-3 py-1 rounded-md border border-slate-200">
-                            Fiche d'affichage A4 officielle
-                          </span>
-                          <span className="text-[9px] text-slate-400 font-mono block mt-1.5 leading-none">
-                            Généré et imprimé le {new Date().toLocaleDateString('fr-FR')}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    <table className="w-full min-w-[700px] border-collapse">
-                      <thead>
-                        <tr>
-                          <th className="w-24 p-3 text-left text-xs font-bold text-slate-400 tracking-widest uppercase border-b border-slate-100">
-                            Heure
-                          </th>
-                          {DAYS.map(day => (
-                            <th 
-                              key={day.id} 
-                              className="p-3 text-center text-xs font-bold text-slate-700 tracking-wide uppercase border-b border-slate-100"
-                            >
-                              {day.name}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {TIME_SLOTS.map(slot => (
-                          <tr key={slot.id} className="group border-b border-slate-100/50 hover:bg-slate-50/30">
-                            {/* Hour label slot cell */}
-                            <td className="p-3 font-semibold text-xs text-slate-400 border-r border-slate-100">
-                              <div className="font-bold text-slate-700">{slot.id}</div>
-                              <div className="text-[10px] mt-0.5">{slot.start} - {slot.end}</div>
-                            </td>
 
-                            {/* Active days scheduling cell elements */}
-                            {DAYS.map(day => {
-                              // Find courses scheduled at this slot matching our active view filters
-                              const matchedCourses = currentGridCourses.filter(c => c.dayId === day.id && c.slotId === slot.id);
-                              
-                              // Check if we have any conflicts involving these specific course IDs
-                              const slotConflicts = conflicts.filter(c => 
-                                matchedCourses.some(mc => c.courseIds.includes(mc.id))
-                              );
-                              const hasError = slotConflicts.some(sc => sc.severity === 'error');
-                              const hasWarning = slotConflicts.some(sc => sc.severity === 'warning');
+                          <table className="w-full min-w-[700px] border-collapse">
+                            <thead>
+                              <tr>
+                                <th className="w-24 p-3 text-left text-xs font-bold text-slate-400 tracking-widest uppercase border-b border-slate-100">
+                                  Heure
+                                </th>
+                                {DAYS.map(day => (
+                                  <th 
+                                    key={day.id} 
+                                    className="p-3 text-center text-xs font-bold text-slate-700 tracking-wide uppercase border-b border-slate-100"
+                                  >
+                                    {day.name}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {TIME_SLOTS.map(slot => (
+                                <tr key={slot.id} className="group border-b border-slate-100/50 hover:bg-slate-50/30">
+                                  {/* Hour label slot cell */}
+                                  <td className="p-3 font-semibold text-xs text-slate-400 border-r border-slate-100">
+                                    <div className="font-bold text-slate-700">{slot.id}</div>
+                                    <div className="text-[10px] mt-0.5">{slot.start} - {slot.end}</div>
+                                  </td>
 
-                              return (
-                                <td 
-                                  key={day.id} 
-                                  className="p-2 border-r border-slate-100 align-top min-w-[130px]"
-                                >
-                                  {matchedCourses.length > 0 ? (
-                                    <div className="space-y-2">
-                                      {matchedCourses.map(course => {
-                                        const subColor = getSubjectColorClasses(course.subjectId);
-                                        const classColor = getClassColorClasses(course.classId);
-                                        const teacherObj = teachers.find(t => t.id === course.teacherId);
-                                        const roomObj = rooms.find(r => r.id === course.roomId);
+                                  {/* Active days scheduling cell elements */}
+                                  {DAYS.map(day => {
+                                    const slotCourses = matchedCourses.filter(c => c.dayId === day.id && c.slotId === slot.id);
+                                    
+                                    // Check conflicts
+                                    const slotConflicts = conflicts.filter(c => 
+                                      slotCourses.some(mc => c.courseIds.includes(mc.id))
+                                    );
+                                    const hasError = slotConflicts.some(sc => sc.severity === 'error');
+                                    const hasWarning = slotConflicts.some(sc => sc.severity === 'warning');
 
-                                        // Find if this particular course has warning or error conflicts on it
-                                        const courseConflicts = slotConflicts.filter(sc => sc.courseIds.includes(course.id));
-                                        const isCourseInError = courseConflicts.some(sc => sc.severity === 'error');
-                                        const isCourseInWarning = courseConflicts.some(sc => sc.severity === 'warning');
+                                    return (
+                                      <td 
+                                        key={day.id} 
+                                        className="p-2 border-r border-slate-100 align-top min-w-[130px]"
+                                      >
+                                        {slotCourses.length > 0 ? (
+                                          <div className="space-y-2">
+                                            {slotCourses.map(course => {
+                                              const subColor = getSubjectColorClasses(course.subjectId);
+                                              const classColor = getClassColorClasses(course.classId);
+                                              const teacherObj = teachers.find(t => t.id === course.teacherId);
+                                              const roomObj = rooms.find(r => r.id === course.roomId);
 
-                                        return (
-                                          <div
-                                            key={course.id}
-                                            className={`group/card relative py-2.5 px-3 rounded-2xl border text-left transition hover:scale-[1.02] hover:shadow-sm ${subColor.bg} ${subColor.border} ${
-                                              isCourseInError ? 'ring-2 ring-red-500' : isCourseInWarning ? 'ring-2 ring-amber-400' : ''
-                                            }`}
-                                          >
-                                            <div className="flex justify-between items-start">
-                                              <span className="text-xs font-bold leading-tight block">
-                                                {subjects.find(s => s.id === course.subjectId)?.name || course.subjectId}
-                                              </span>
-                                              
-                                              {/* Hover interactive actions */}
-                                              <div className="opacity-0 group-hover/card:opacity-100 flex items-center gap-1 transition ml-2">
-                                                <button
-                                                  onClick={() => handleOpenSlotModal(day.id, slot.id, course)}
-                                                  className="cursor-pointer p-1 rounded-md text-slate-600 bg-white hover:bg-slate-150 transition border border-slate-250"
-                                                  title="Modifier"
+                                              const courseConflicts = slotConflicts.filter(sc => sc.courseIds.includes(course.id));
+                                              const isCourseInError = courseConflicts.some(sc => sc.severity === 'error');
+                                              const isCourseInWarning = courseConflicts.some(sc => sc.severity === 'warning');
+
+                                              return (
+                                                <div
+                                                  key={course.id}
+                                                  className={`group/card relative py-2.5 px-3 rounded-2xl border text-left transition hover:scale-[1.02] hover:shadow-sm ${subColor.bg} ${subColor.border} ${
+                                                    isCourseInError ? 'ring-2 ring-red-500' : isCourseInWarning ? 'ring-2 ring-amber-400' : ''
+                                                  }`}
                                                 >
-                                                  <Edit className="h-3 w-3" />
-                                                </button>
-                                                <button
-                                                  onClick={() => handleDeleteCourse(course.id)}
-                                                  className="cursor-pointer p-1 rounded-md text-red-600 bg-white hover:bg-red-50 transition border border-red-200"
-                                                  title="Supprimer"
-                                                >
-                                                  <Trash2 className="h-3 w-3" />
-                                                </button>
-                                              </div>
-                                            </div>
-
-                                            {/* Sub Details label text */}
-                                            <div className="text-[11px] font-medium text-slate-600 mt-1 space-y-0.5">
-                                              {calendarFilterType !== 'class' && (
-                                                <div className="flex items-center gap-1 font-bold">
-                                                  <GraduationCap className="h-2.5 w-2.5" />
-                                                  <span>{classColor && classColor.font ? '' : ''}{classes.find(c => c.id === course.classId)?.name || course.classId}</span>
-                                                </div>
-                                              )}
-                                              {calendarFilterType !== 'teacher' && (
-                                                <div className="flex items-center gap-1">
-                                                  <User className="h-2.5 w-2.5" />
-                                                  <span>{teacherObj?.name || course.teacherId}</span>
-                                                </div>
-                                              )}
-                                              {calendarFilterType !== 'room' && (
-                                                <div className="flex items-center gap-1">
-                                                  <School className="h-2.5 w-2.5" />
-                                                  <span className="font-semibold">{roomObj?.name || course.roomId}</span>
-                                                </div>
-                                              )}
-                                            </div>
-
-                                            {/* Indicators if conflicts exist inside that card */}
-                                            {courseConflicts.length > 0 && (
-                                              <div className="mt-1.5 pt-1 border-t border-slate-200/50 flex flex-col gap-1">
-                                                {courseConflicts.map((sc, scIdx) => (
-                                                  <div 
-                                                    key={scIdx} 
-                                                    className={`text-[9px] font-bold flex items-center gap-1 ${sc.severity === 'error' ? 'text-red-700' : 'text-amber-700'}`}
-                                                    title={sc.message}
-                                                  >
-                                                    {sc.severity === 'error' ? <AlertCircle className="h-2.5 w-2.5 inline shrink-0" /> : <AlertTriangle className="h-2.5 w-2.5 inline shrink-0" />}
-                                                    <span className="truncate max-w-[150px]">{sc.message}</span>
+                                                  <div className="flex justify-between items-start">
+                                                    <span className="text-xs font-bold leading-tight block">
+                                                      {subjects.find(s => s.id === course.subjectId)?.name || course.subjectId}
+                                                    </span>
+                                                    
+                                                    {/* Hover interactive actions */}
+                                                    <div className="opacity-0 group-hover/card:opacity-100 flex items-center gap-1 transition ml-2">
+                                                      <button
+                                                        onClick={() => handleOpenSlotModal(day.id, slot.id, course)}
+                                                        className="cursor-pointer p-1 rounded-md text-slate-600 bg-white hover:bg-slate-150 transition border border-slate-250"
+                                                        title="Modifier"
+                                                      >
+                                                        <Edit className="h-3 w-3" />
+                                                      </button>
+                                                      <button
+                                                        onClick={() => handleDeleteCourse(course.id)}
+                                                        className="cursor-pointer p-1 rounded-md text-red-650 bg-white hover:bg-red-50 transition border border-red-200"
+                                                        title="Supprimer"
+                                                      >
+                                                        <Trash2 className="h-3 w-3" />
+                                                      </button>
+                                                    </div>
                                                   </div>
-                                                ))}
-                                              </div>
-                                            )}
+
+                                                  {/* Sub Details label text */}
+                                                  <div className="text-[11px] font-medium text-slate-655 mt-1 space-y-0.5">
+                                                    {calendarFilterType !== 'class' && (
+                                                      <div className="flex items-center gap-1 font-bold">
+                                                        <GraduationCap className="h-2.5 w-2.5" />
+                                                        <span>{classes.find(c => c.id === course.classId)?.name || course.classId}</span>
+                                                      </div>
+                                                    )}
+                                                    {calendarFilterType !== 'teacher' && (
+                                                      <div className="flex items-center gap-1">
+                                                        <User className="h-2.5 w-2.5" />
+                                                        <span>{teacherObj?.name || course.teacherId}</span>
+                                                      </div>
+                                                    )}
+                                                    {calendarFilterType !== 'room' && (
+                                                      <div className="flex items-center gap-1">
+                                                        <School className="h-2.5 w-2.5" />
+                                                        <span className="font-semibold">{roomObj?.name || course.roomId}</span>
+                                                      </div>
+                                                    )}
+                                                  </div>
+
+                                                  {/* Indicators if conflicts exist inside that card */}
+                                                  {courseConflicts.length > 0 && (
+                                                    <div className="mt-1.5 pt-1 border-t border-slate-200/50 flex flex-col gap-1">
+                                                      {courseConflicts.map((sc, scIdx) => (
+                                                        <div 
+                                                          key={scIdx} 
+                                                          className={`text-[9px] font-bold flex items-center gap-1 ${sc.severity === 'error' ? 'text-red-700' : 'text-amber-700'}`}
+                                                          title={sc.message}
+                                                        >
+                                                          {sc.severity === 'error' ? <AlertCircle className="h-2.5 w-2.5 inline shrink-0" /> : <AlertTriangle className="h-2.5 w-2.5 inline shrink-0" />}
+                                                          <span className="truncate max-w-[150px]">{sc.message}</span>
+                                                        </div>
+                                                      ))}
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              );
+                                            })}
                                           </div>
-                                        );
-                                      })}
-                                    </div>
-                                  ) : (
-                                    // Empty slot card layout (Add Trigger)
-                                    <button
-                                      onClick={() => handleOpenSlotModal(day.id, slot.id)}
-                                      className="w-full text-center py-6 border border-dashed border-slate-200 rounded-2xl hover:border-indigo-400 hover:bg-indigo-50/30 text-slate-350 hover:text-indigo-600 font-bold transition flex flex-col items-center justify-center gap-1 group/empty cursor-pointer"
-                                    >
-                                      <Plus className="h-4 w-4 transform group-hover/empty:scale-110 transition shrink-0" />
-                                      <span className="text-[10px] uppercase tracking-wider font-semibold">Réserver</span>
-                                    </button>
-                                  )}
-                                </td>
-                              );
-                            })}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                                        ) : (
+                                          // Empty slot card layout (Add Trigger)
+                                          <button
+                                            onClick={() => handleOpenSlotModal(day.id, slot.id, undefined, singleFilter)}
+                                            className="w-full text-center py-6 border border-dashed border-slate-200 rounded-2xl hover:border-indigo-400 hover:bg-indigo-50/30 text-slate-350 hover:text-indigo-600 font-bold transition flex flex-col items-center justify-center gap-1 group/empty cursor-pointer"
+                                          >
+                                            <Plus className="h-4 w-4 transform group-hover/empty:scale-110 transition shrink-0" />
+                                            <span className="text-[10px] uppercase tracking-wider font-semibold">Réserver</span>
+                                          </button>
+                                        )}
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
