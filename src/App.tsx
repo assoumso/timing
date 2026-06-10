@@ -166,6 +166,8 @@ export default function App() {
   const [wizardHoursCount, setWizardHoursCount] = useState(2);
   const [isWizardLoading, setIsWizardLoading] = useState(false);
   const [wizardLog, setWizardLog] = useState('');
+  const [isGeneratingAll, setIsGeneratingAll] = useState(false);
+  const [generateAllLog, setGenerateAllLog] = useState('');
 
   // Course planner modals
   const [isAddEditCourseModalOpen, setIsAddEditCourseModalOpen] = useState(false);
@@ -702,6 +704,75 @@ export default function App() {
     } finally {
       setIsWizardLoading(false);
     }
+  };
+
+  // Génération IA pour TOUTES les classes en un seul coup
+  const handleGenerateAllClasses = async () => {
+    if (classes.length === 0) {
+      alert('Aucune classe enregistrée.');
+      return;
+    }
+    if (!window.confirm(`Lancer la génération automatique de l'emploi du temps pour toutes les ${classes.length} classes avec la matière et le professeur sélectionnés ?`)) return;
+
+    setIsGeneratingAll(true);
+    setGenerateAllLog('⏳ Démarrage de la génération globale...');
+
+    // Construire les besoins pour toutes les classes
+    const requirements = classes.map(cls => ({
+      classId: cls.id,
+      subjectId: wizardSubject,
+      teacherId: wizardTeacher,
+      roomId: wizardRoom,
+      count: wizardHoursCount
+    }));
+
+    let allAdded: any[] = [];
+    let currentCourses = [...courses];
+
+    for (let i = 0; i < requirements.length; i++) {
+      const req = requirements[i];
+      const className = classes.find(c => c.id === req.classId)?.name || req.classId;
+      setGenerateAllLog(prev => prev + `\n🔄 [${i + 1}/${requirements.length}] Planification de la classe ${className}...`);
+
+      try {
+        const response = await fetch('/api/gemini/generate-auto', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            classes,
+            teachers,
+            rooms,
+            currentCourses: currentCourses,
+            requirementsToScheduleByClass: [req]
+          })
+        });
+
+        const resData = await response.json();
+        if (resData.success && Array.isArray(resData.courses) && resData.courses.length > 0) {
+          allAdded = [...allAdded, ...resData.courses];
+          currentCourses = [...currentCourses, ...resData.courses];
+          setGenerateAllLog(prev => prev + ` ✅ ${resData.courses.length} cours ajoutés.`);
+        } else {
+          setGenerateAllLog(prev => prev + ` ⚠️ Aucun créneau trouvé.`);
+        }
+      } catch (e: any) {
+        setGenerateAllLog(prev => prev + ` ❌ Erreur: ${e.message}`);
+      }
+    }
+
+    if (allAdded.length > 0) {
+      setCourses(prev => [...prev, ...allAdded]);
+      setGenerateAllLog(prev => prev + `\n\n🎉 Terminé ! ${allAdded.length} cours insérés pour ${classes.length} classes.`);
+      setAiChatHistory(prev => [
+        ...prev,
+        { role: 'user', text: `Génère automatiquement l'emploi du temps pour toutes les classes` },
+        { role: 'model', text: `J'ai planifié **${allAdded.length} cours** répartis sur **${classes.length} classes** sans créer de conflit. Tous les créneaux ont été insérés directement dans la grille de planification !` }
+      ]);
+    } else {
+      setGenerateAllLog(prev => prev + '\n\n⚠️ Aucun cours n\'a pu être généré. Vérifiez vos données (professeurs, salles, disponibilités).');
+    }
+
+    setIsGeneratingAll(false);
   };
 
   // Submit chat prompt to Gemini suggestion engine
@@ -2430,17 +2501,35 @@ export default function App() {
                     />
                   </div>
 
+                  {/* Bouton : Générer pour UNE classe */}
                   <button
                     onClick={handleTriggerWizardGeneration}
-                    disabled={isWizardLoading}
-                    className="cursor-pointer w-full text-center py-2 px-3 rounded-lg bg-purple-750 hover:bg-purple-700 text-white font-extrabold text-xs transition shadow-sm disabled:opacity-50"
+                    disabled={isWizardLoading || isGeneratingAll}
+                    className="cursor-pointer w-full text-center py-2 px-3 rounded-lg bg-purple-700 hover:bg-purple-600 text-white font-extrabold text-xs transition shadow-sm disabled:opacity-50 flex items-center justify-center gap-2"
                   >
-                    {isWizardLoading ? "Attribution automatique..." : "Générer et positionner via l'IA !"}
+                    <Sparkles className="h-3.5 w-3.5" />
+                    {isWizardLoading ? "Attribution en cours..." : "Générer pour cette classe"}
+                  </button>
+
+                  {/* Bouton : Générer pour TOUTES les classes */}
+                  <button
+                    onClick={handleGenerateAllClasses}
+                    disabled={isWizardLoading || isGeneratingAll}
+                    className="cursor-pointer w-full text-center py-2.5 px-3 rounded-lg bg-gradient-to-r from-indigo-700 to-purple-700 hover:from-indigo-600 hover:to-purple-600 text-white font-extrabold text-xs transition shadow-md disabled:opacity-50 flex items-center justify-center gap-2 border border-white/10"
+                  >
+                    <Sliders className="h-3.5 w-3.5" />
+                    {isGeneratingAll ? "Génération globale en cours..." : `⚡ Générer pour toutes les classes (${classes.length})`}
                   </button>
 
                   {wizardLog && (
                     <div className="p-2 border border-purple-200 bg-white rounded-lg text-[10px] font-semibold text-purple-900 leading-normal max-h-[80px] overflow-y-auto">
                       {wizardLog}
+                    </div>
+                  )}
+
+                  {generateAllLog && (
+                    <div className="p-2 border border-indigo-200 bg-indigo-50 rounded-lg text-[10px] font-mono text-indigo-900 leading-relaxed max-h-[120px] overflow-y-auto whitespace-pre-line">
+                      {generateAllLog}
                     </div>
                   )}
                 </div>
