@@ -102,7 +102,8 @@ export default function App() {
       'localhost',
       '127.0.0.1',
       'run.app',
-      'google.com'
+      'google.com',
+      'vercel.app'
     ];
     
     const isAllowed = allowedDomains.some(domain => hostname.includes(domain));
