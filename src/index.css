@@ -1,26 +1,31 @@
 @import "tailwindcss";
 
 @media print {
-  /* Enforce A4 landscape format */
+  /* ── Format A4 paysage strict ── */
   @page {
     size: A4 landscape;
-    margin: 12mm 15mm 12mm 15mm;
+    margin: 8mm 10mm 8mm 10mm;
   }
 
-  body {
+  /* Reset global pour l'impression */
+  html, body {
     background: #ffffff !important;
     color: #000000 !important;
-    font-size: 11px !important;
+    font-size: 9px !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
   }
 
-  /* Force background colors and borders in browsers */
+  /* Préserver les couleurs de fond exactes */
   * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
     box-shadow: none !important;
+    text-shadow: none !important;
   }
 
-  /* Hide headers, footers, interactive elements, forms, assistant and widgets */
+  /* ── Cacher tous les éléments non imprimables ── */
   header,
   footer,
   aside,
@@ -29,54 +34,104 @@
   button,
   select,
   input,
-  #ai-assistant-drawer,
-  .fixed,
-  .absolute {
+  #ai-assistant-drawer {
     display: none !important;
   }
 
-  /* Standard print-only section */
+  /* ── Afficher les éléments print-only ── */
   .print-only {
     display: block !important;
   }
 
-  /* Outer spacing and alignment */
+  /* ── Zone principale : pleine largeur sans marges ── */
+  body > #root,
   main {
     display: block !important;
     width: 100% !important;
     max-width: 100% !important;
     margin: 0 !important;
     padding: 0 !important;
-    box-shadow: none !important;
+    overflow: visible !important;
     background: transparent !important;
   }
 
-  /* Force print table borders to be visible and solid */
+  /* ── Conteneur du tableau ── */
+  .overflow-x-auto {
+    overflow: visible !important;
+    border: none !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+  }
+
+  /* ── Tableau : tenir sur une seule page ── */
   table {
     border-collapse: collapse !important;
     width: 100% !important;
+    table-layout: fixed !important;
     page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
 
+  thead {
+    display: table-header-group !important;
+  }
+
+  tbody {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* ── Cellules compactes et nettes ── */
   th, td {
-    border: 1px solid #94a3b8 !important; /* border-slate-400 */
-    padding: 6px 8px !important;
-    font-size: 11px !important;
-    color: #000000 !important;
-    background-color: transparent !important;
+    border: 1px solid #64748b !important;
+    padding: 3px 4px !important;
+    font-size: 8px !important;
+    color: #0f172a !important;
+    vertical-align: top !important;
+    word-wrap: break-word !important;
+    overflow: hidden !important;
   }
 
   th {
-    background-color: #f1f5f9 !important; /* bg-slate-100 */
-    font-weight: 700 !important;
+    background-color: #e2e8f0 !important;
+    font-weight: 800 !important;
+    text-align: center !important;
+    font-size: 9px !important;
+    color: #1e293b !important;
   }
 
-  /* Clean up card representations */
-  .print-card-border {
-    border: 1px solid #cbd5e1 !important;
-    background-color: #f8fafc !important;
-    margin-top: 4px;
-    padding: 6px !important;
-    border-radius: 4px !important;
+  /* ── Cartes de cours dans les cellules ── */
+  .print-card-border,
+  [class*="rounded-2xl"],
+  [class*="rounded-xl"] {
+    border-radius: 3px !important;
+  }
+
+  /* Réduire la taille des cartes cours à l'impression */
+  td > div > div {
+    padding: 2px 4px !important;
+    margin-bottom: 2px !important;
+  }
+
+  /* ── Masquer les boutons d'action hover dans les cellules ── */
+  [class*="opacity-0"],
+  [class*="group-hover"] {
+    display: none !important;
+  }
+
+  /* ── En-tête d'impression ── */
+  .hidden.print\:block {
+    display: block !important;
+    margin-bottom: 4mm !important;
+  }
+
+  /* ── Empêcher tout débordement de page ── */
+  .space-y-6 > * + * {
+    margin-top: 0 !important;
   }
 }
