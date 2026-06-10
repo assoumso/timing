@@ -1126,15 +1126,15 @@ export default function App() {
                   supabaseStatus === 'connecting' ? 'text-amber-400 animate-spin' : 
                   supabaseStatus === 'error_tables' ? 'text-red-400 animate-pulse' : 'text-slate-400'
                 }`} />
-                <span className="text-[10px] font-bold text-slate-400">Supabase:</span>
+              <span className="text-[10px] font-bold text-slate-400">État :</span>
                 <span className={`text-[10px] font-extrabold ${
                   supabaseStatus === 'synced' ? 'text-emerald-400' : 
                   supabaseStatus === 'connecting' ? 'text-amber-400' : 
                   supabaseStatus === 'error_tables' ? 'text-red-400' : 'text-slate-400'
                 }`}>
-                  {supabaseStatus === 'synced' ? 'SYNCHRONISÉ' : 
-                   supabaseStatus === 'connecting' ? 'CONNEXION...' : 
-                   supabaseStatus === 'error_tables' ? 'SQL REQUIS' : 'HORS LIGNE'}
+                  {supabaseStatus === 'synced' ? 'Connecté à la base de données' : 
+                   supabaseStatus === 'connecting' ? 'Connexion en cours...' : 
+                   supabaseStatus === 'error_tables' ? 'Erreur base de données' : 'Base de données hors ligne'}
                 </span>
               </div>
 
