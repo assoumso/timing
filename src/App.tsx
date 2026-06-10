@@ -24,6 +24,8 @@ import DashboardTab from './components/DashboardTab';
 import { BrandLogo } from './components/BrandLogo';
 import { SettingsTab } from './components/SettingsTab';
 import { StatsTab } from './components/StatsTab';
+import { AutocompleteSelect, MultiAutocompleteSelect } from './components/AutocompleteSelect';
+import type { SelectOption } from './components/AutocompleteSelect';
 import { 
   Calendar, 
   LayoutDashboard, 
@@ -142,7 +144,7 @@ export default function App() {
   
   // Selection filter for standard calendar
   const [calendarFilterType, setCalendarFilterType] = useState<'class' | 'teacher' | 'room'>('class');
-  const [selectedFilterValue, setSelectedFilterValue] = useState<string>('6A');
+  const [selectedFilterValue, setSelectedFilterValue] = useState<string[]>(['6A']);
 
   // Teacher portal state variables
   const [selectedProfPortalId, setSelectedProfPortalId] = useState<string>('prof_martin');
@@ -540,11 +542,11 @@ export default function App() {
   // Handle auto filter defaults when filter categories change
   useEffect(() => {
     if (calendarFilterType === 'class' && classes.length > 0) {
-      setSelectedFilterValue(classes[0].id);
+      setSelectedFilterValue([classes[0].id]);
     } else if (calendarFilterType === 'teacher' && teachers.length > 0) {
-      setSelectedFilterValue(teachers[0].id);
+      setSelectedFilterValue([teachers[0].id]);
     } else if (calendarFilterType === 'room' && rooms.length > 0) {
-      setSelectedFilterValue(rooms[0].id);
+      setSelectedFilterValue([rooms[0].id]);
     }
   }, [calendarFilterType]);
 
@@ -579,7 +581,7 @@ export default function App() {
   // Switch filter selection to class instantly
   const handleNavigateToClassAndFilter = (classId: string) => {
     setCalendarFilterType('class');
-    setSelectedFilterValue(classId);
+    setSelectedFilterValue([classId]);
     setActiveTab('schedule');
   };
 
@@ -597,9 +599,9 @@ export default function App() {
     } else {
       setEditingCourseId(null);
       // Try to pre-fill logically based on current filter state
-      setModalClassId(calendarFilterType === 'class' ? selectedFilterValue : (classes[0]?.id || ''));
-      setModalTeacherId(calendarFilterType === 'teacher' ? selectedFilterValue : (teachers[0]?.id || ''));
-      setModalRoomId(calendarFilterType === 'room' ? selectedFilterValue : (rooms[0]?.id || ''));
+      setModalClassId(calendarFilterType === 'class' ? (selectedFilterValue[0] || classes[0]?.id || '') : (classes[0]?.id || ''));
+      setModalTeacherId(calendarFilterType === 'teacher' ? (selectedFilterValue[0] || teachers[0]?.id || '') : (teachers[0]?.id || ''));
+      setModalRoomId(calendarFilterType === 'room' ? (selectedFilterValue[0] || rooms[0]?.id || '') : (rooms[0]?.id || ''));
       setModalSubjectId(subjects[0]?.id || '');
     }
 
@@ -1039,11 +1041,11 @@ export default function App() {
 
     // Role admin filtered
     if (calendarFilterType === 'class') {
-      return courses.filter(c => c.classId === selectedFilterValue);
+      return courses.filter(c => selectedFilterValue.includes(c.classId));
     } else if (calendarFilterType === 'teacher') {
-      return courses.filter(c => c.teacherId === selectedFilterValue);
+      return courses.filter(c => selectedFilterValue.includes(c.teacherId));
     } else {
-      return courses.filter(c => c.roomId === selectedFilterValue);
+      return courses.filter(c => selectedFilterValue.includes(c.roomId));
     }
   };
 
@@ -1394,24 +1396,23 @@ export default function App() {
                         </button>
                       </div>
  
-                      {/* Dropdown selector for dynamic filters state */}
+                      {/* Autocomplete multi-select filtrable */}
                       <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-semibold text-slate-400">Ciblé:</span>
-                        <select
-                          value={selectedFilterValue}
-                          onChange={(e) => setSelectedFilterValue(e.target.value)}
-                          className="px-3 py-1.5 bg-white border border-slate-200 hover:border-slate-300 rounded-xl text-xs font-semibold text-slate-800"
-                        >
-                          {calendarFilterType === 'class' && classes.map(c => (
-                            <option key={c.id} value={c.id}>{c.name} ({c.capacity} él.)</option>
-                          ))}
-                          {calendarFilterType === 'teacher' && teachers.map(t => (
-                            <option key={t.id} value={t.id}>{t.name}</option>
-                          ))}
-                          {calendarFilterType === 'room' && rooms.map(r => (
-                            <option key={r.id} value={r.id}>{r.name} - ({r.type}, Cap: {r.capacity})</option>
-                          ))}
-                        </select>
+                        <span className="text-xs font-semibold text-slate-400">Ciblé :</span>
+                        <MultiAutocompleteSelect
+                          className="min-w-[220px]"
+                          values={selectedFilterValue}
+                          onChange={setSelectedFilterValue}
+                          placeholder="Sélectionner..."
+                          selectAllLabel={calendarFilterType === 'class' ? 'Toutes les classes' : calendarFilterType === 'teacher' ? 'Tous les professeurs' : 'Toutes les salles'}
+                          options={
+                            calendarFilterType === 'class'
+                              ? classes.map(c => ({ value: c.id, label: c.name, sub: `${c.capacity} élèves` }))
+                              : calendarFilterType === 'teacher'
+                              ? teachers.map(t => ({ value: t.id, label: t.name, sub: t.subjects.map(sid => subjects.find(s => s.id === sid)?.name || sid).join(', ') }))
+                              : rooms.map(r => ({ value: r.id, label: r.name, sub: `${r.type} — ${r.capacity} places` }))
+                          }
+                        />
                       </div>
                     </div>
  
@@ -1443,9 +1444,9 @@ export default function App() {
                             {schoolName} — {schoolSubName}
                           </div>
                           <h1 className="text-2xl font-black text-slate-950 uppercase tracking-tight">
-                            {calendarFilterType === 'class' && `Emploi du Temps : Classe de ${classes.find(c => c.id === selectedFilterValue)?.name || selectedFilterValue}`}
-                            {calendarFilterType === 'teacher' && `Emploi du Temps (Enseignant) : ${teachers.find(t => t.id === selectedFilterValue)?.name || selectedFilterValue}`}
-                            {calendarFilterType === 'room' && `Affectation de la Salle : ${rooms.find(r => r.id === selectedFilterValue)?.name || selectedFilterValue}`}
+                            {calendarFilterType === 'class' && `Emploi du Temps : ${selectedFilterValue.length > 1 ? `${selectedFilterValue.length} Classes` : `Classe de ${classes.find(c => c.id === selectedFilterValue[0])?.name || selectedFilterValue[0]}`}`}
+                            {calendarFilterType === 'teacher' && `Emploi du Temps : ${selectedFilterValue.length > 1 ? `${selectedFilterValue.length} Enseignants` : `Enseignant : ${teachers.find(t => t.id === selectedFilterValue[0])?.name || selectedFilterValue[0]}`}`}
+                            {calendarFilterType === 'room' && `Affectation : ${selectedFilterValue.length > 1 ? `${selectedFilterValue.length} Salles` : `Salle : ${rooms.find(r => r.id === selectedFilterValue[0])?.name || selectedFilterValue[0]}`}`}
                           </h1>
                           <p className="text-xs text-slate-600 font-semibold">
                             Fiche d'apprentissage officielle de l'établissement scolaire — Année Académique {academicYear}
@@ -2595,31 +2596,23 @@ export default function App() {
               {/* Class group code */}
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-slate-500">Groupe Classe</label>
-                <select
+                <AutocompleteSelect
+                  options={classes.map(c => ({ value: c.id, label: c.name, sub: `${c.capacity} él.` }))}
                   value={modalClassId}
-                  onChange={(e) => setModalClassId(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-250 hover:border-slate-350 rounded-xl text-xs font-semibold text-slate-800"
-                >
-                  <option value="">Sélectionnez un groupe</option>
-                  {classes.map(c => (
-                    <option key={c.id} value={c.id}>{c.name} ({c.capacity} él.)</option>
-                  ))}
-                </select>
+                  onChange={setModalClassId}
+                  placeholder="Sélectionnez un groupe"
+                />
               </div>
 
               {/* Subject course name */}
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-slate-500">Matière Enseignée</label>
-                <select
+                <AutocompleteSelect
+                  options={subjects.map(s => ({ value: s.id, label: s.name }))}
                   value={modalSubjectId}
-                  onChange={(e) => setModalSubjectId(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-250 hover:border-slate-350 rounded-xl text-xs font-semibold text-slate-800"
-                >
-                  <option value="">Sélectionnez une matière</option>
-                  {subjects.map(s => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
+                  onChange={setModalSubjectId}
+                  placeholder="Sélectionnez une matière"
+                />
               </div>
 
               {/* Teacher code */}
@@ -2628,31 +2621,31 @@ export default function App() {
                   <label className="font-semibold text-slate-500">Professeur en charge</label>
                   <span className="text-[10px] text-indigo-600 font-bold">Sélection qualifiée</span>
                 </div>
-                <select
+                <AutocompleteSelect
+                  options={teachers.map(t => ({
+                    value: t.id,
+                    label: t.name,
+                    sub: t.subjects.map(x => subjects.find(s=>s.id===x)?.name || x).join(', ')
+                  }))}
                   value={modalTeacherId}
-                  onChange={(e) => setModalTeacherId(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-250 hover:border-slate-350 rounded-xl text-xs font-semibold text-slate-800"
-                >
-                  <option value="">Sélectionnez l'enseignant</option>
-                  {teachers.map(t => (
-                    <option key={t.id} value={t.id}>{t.name} ({t.subjects.map(x => subjects.find(s=>s.id===x)?.name || x).join(', ')})</option>
-                  ))}
-                </select>
+                  onChange={setModalTeacherId}
+                  placeholder="Sélectionnez l'enseignant"
+                />
               </div>
 
               {/* Classroom location */}
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-slate-500">Salle de Classe réservée</label>
-                <select
+                <AutocompleteSelect
+                  options={rooms.map(r => ({
+                    value: r.id,
+                    label: r.name,
+                    sub: `Cap: ${r.capacity} pl. (${r.type})`
+                  }))}
                   value={modalRoomId}
-                  onChange={(e) => setModalRoomId(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-250 hover:border-slate-350 rounded-xl text-xs font-semibold text-slate-800"
-                >
-                  <option value="">Sélectionnez la salle</option>
-                  {rooms.map(r => (
-                    <option key={r.id} value={r.id}>{r.name} - Cap: {r.capacity} pl. ({r.type})</option>
-                  ))}
-                </select>
+                  onChange={setModalRoomId}
+                  placeholder="Sélectionnez la salle"
+                />
               </div>
 
               {/* Actions footer buttons */}
