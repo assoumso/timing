@@ -8,7 +8,8 @@ import {
   ScheduleCourse, 
   Conflict, 
   DAYS, 
-  TIME_SLOTS 
+  TIME_SLOTS,
+  ActivationCode
 } from './types';
 import { 
   INITIAL_CLASSES, 
@@ -20,6 +21,9 @@ import {
 } from './data';
 import { checkAllConflicts } from './utils/conflictChecker';
 import DashboardTab from './components/DashboardTab';
+import { BrandLogo } from './components/BrandLogo';
+import { SettingsTab } from './components/SettingsTab';
+import { StatsTab } from './components/StatsTab';
 import { 
   Calendar, 
   LayoutDashboard, 
@@ -36,14 +40,17 @@ import {
   Send, 
   Check, 
   Edit, 
-  ChevronRight, 
+  ChevronRight,
+  Shield, 
   Info,
   Clock,
   User,
   LogOut,
   Sliders,
   Database,
-  Printer
+  Printer,
+  Settings,
+  BarChart3
 } from 'lucide-react';
 
 export default function App() {
@@ -70,8 +77,67 @@ export default function App() {
   });
 
   // UI Navigation states
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'schedule' | 'teachers' | 'rooms' | 'classes' | 'subjects'>('dashboard');
-  const [userRole, setUserRole] = useState<'admin' | 'professor'>('admin');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'schedule' | 'teachers' | 'rooms' | 'classes' | 'subjects' | 'settings' | 'stats'>('dashboard');
+  
+  // Custom establishment settings states
+  const [schoolName, setSchoolName] = useState(() => localStorage.getItem('barakat_school_name') || "ÉCOLE DES FAMILLES");
+  const [schoolSubName, setSchoolSubName] = useState(() => localStorage.getItem('barakat_school_sub_name') || "ÉTIMOÉ & MAKORÉ");
+  const [academicYear, setAcademicYear] = useState(() => localStorage.getItem('barakat_academic_year') || "2025-2026");
+  const [schoolAddress, setSchoolAddress] = useState(() => localStorage.getItem('barakat_school_address') || "Abidjan, Côte d'Ivoire");
+  const [schoolPhone, setSchoolPhone] = useState(() => localStorage.getItem('barakat_school_phone') || "+225 07 07 07 07 07");
+  const [schoolEmail, setSchoolEmail] = useState(() => localStorage.getItem('barakat_school_email') || "contact@ecoledesfamilles.ed.ci");
+  const [schoolDirector, setSchoolDirector] = useState(() => localStorage.getItem('barakat_school_director') || "Mme Catherine Amon");
+  const [schoolMotto, setSchoolMotto] = useState(() => localStorage.getItem('barakat_school_motto') || "Éducation - Valeurs - Excellence");
+
+  const [userRole, setUserRole] = useState<'admin' | 'professor'>(() => {
+    const code = localStorage.getItem('barakat_activation_code_used') || '';
+    return code === "BKT-ADMIN-789-MASTER" ? 'admin' : 'professor';
+  });
+  const [isDomainLocked, setIsDomainLocked] = useState(false);
+
+  // Security locks for Host / Domain locking (anti-copy/anti-clone) and right-click block
+  useEffect(() => {
+    const hostname = window.location.hostname;
+    const allowedDomains = [
+      'localhost',
+      '127.0.0.1',
+      'run.app',
+      'google.com'
+    ];
+    
+    const isAllowed = allowedDomains.some(domain => hostname.includes(domain));
+    if (!isAllowed) {
+      setIsDomainLocked(true);
+      return;
+    }
+
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'F12') {
+        e.preventDefault();
+      }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'I' || e.key === 'i')) {
+        e.preventDefault();
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'S' || e.key === 's')) {
+        e.preventDefault();
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'U' || e.key === 'u')) {
+        e.preventDefault();
+      }
+    };
+
+    document.addEventListener('contextmenu', handleContextMenu);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('contextmenu', handleContextMenu);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
   
   // Selection filter for standard calendar
   const [calendarFilterType, setCalendarFilterType] = useState<'class' | 'teacher' | 'room'>('class');
@@ -123,6 +189,14 @@ export default function App() {
   const [editingClassId, setEditingClassId] = useState<string | null>(null);
   const [editingRoomId, setEditingRoomId] = useState<string | null>(null);
   const [editingSubjectId, setEditingSubjectId] = useState<string | null>(null);
+
+  // Activation / Clé d'activation unique
+  const [isActivated, setIsActivated] = useState<boolean>(() => localStorage.getItem('barakat_activated') === 'true');
+  const [activationCodeInput, setActivationCodeInput] = useState('');
+  const [isActivating, setIsActivating] = useState(false);
+  const [activationError, setActivationError] = useState('');
+  const [activationCodes, setActivationCodes] = useState<ActivationCode[]>([]);
+
 
   // Supabase Live Synchronization Core Engine
   const [supabaseStatus, setSupabaseStatus] = useState<'idle' | 'connecting' | 'synced' | 'error_tables' | 'error_auth'>('connecting');
@@ -221,6 +295,221 @@ export default function App() {
       setIsSyncing(false);
     }
   };
+
+  // Charger les codes d'activation depuis Supabase (id = 'activation_info')
+  const handleLoadActivationCodes = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('barakat_planning')
+        .select('*')
+        .eq('id', 'activation_info')
+        .maybeSingle();
+
+      if (error) {
+        if (error.code === '42P01') {
+          console.warn("La table d'activation n'existe pas ou n'est pas encore créée.");
+          return;
+        }
+        throw error;
+      }
+
+      if (data && Array.isArray(data.courses)) {
+        setActivationCodes(data.courses as ActivationCode[]);
+      } else {
+        // Initialiser avec quelques codes par défaut
+        const initialCodes: ActivationCode[] = [
+          { code: 'BKT-942-AZE', isUsed: false },
+          { code: 'BKT-108-WXC', isUsed: false },
+          { code: 'BKT-551-NJK', isUsed: false },
+          { code: 'BKT-304-TYP', isUsed: false }
+        ];
+        
+        // On push l'initialisation de manière silencieuse
+        await supabase.from('barakat_planning').upsert({
+          id: 'activation_info',
+          classes: [],
+          teachers: [],
+          rooms: [],
+          subjects: [],
+          courses: initialCodes,
+          updated_at: new Date().toISOString()
+        });
+        setActivationCodes(initialCodes);
+      }
+    } catch (err) {
+      console.error("Erreur de chargement des codes d'activation:", err);
+    }
+  };
+
+  // Générer un nouveau code unique
+  const handleGenerateNewCode = async () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let rand = '';
+    for (let i = 0; i < 6; i++) {
+      rand += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    const newCodeFormatted = `BKT-${rand.slice(0, 3)}-${rand.slice(3, 6)}`;
+    
+    const updated = [...activationCodes, { code: newCodeFormatted, isUsed: false }];
+    
+    try {
+      const { error } = await supabase
+        .from('barakat_planning')
+        .upsert({
+          id: 'activation_info',
+          classes: [],
+          teachers: [],
+          rooms: [],
+          subjects: [],
+          courses: updated,
+          updated_at: new Date().toISOString()
+        });
+        
+      if (error) throw error;
+      setActivationCodes(updated);
+    } catch (err: any) {
+      alert("Erreur lors de la génération du code de sécurité : " + err.message);
+    }
+  };
+
+  // Supprimer un code d'activation
+  const handleDeleteActivationCode = async (codeToDelete: string) => {
+    if (!window.confirm(`Voulez-vous vraiment supprimer le code d'activation ${codeToDelete} ?`)) return;
+    const updated = activationCodes.filter(c => c.code !== codeToDelete);
+    try {
+      const { error } = await supabase
+        .from('barakat_planning')
+        .upsert({
+          id: 'activation_info',
+          classes: [],
+          teachers: [],
+          rooms: [],
+          subjects: [],
+          courses: updated,
+          updated_at: new Date().toISOString()
+        });
+        
+      if (error) throw error;
+      setActivationCodes(updated);
+    } catch (err: any) {
+      alert("Erreur lors de la suppression du code : " + err.message);
+    }
+  };
+
+  // Procédure d'activation depuis la mire de login / blocage
+  const handleVerifyAndActivate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activationCodeInput.trim()) return;
+    
+    setIsActivating(true);
+    setActivationError('');
+    
+    const cleanCode = activationCodeInput.trim().toUpperCase();
+    
+    // Code Administrateur permanent ou d'urgence
+    const masterKey = "BKT-ADMIN-789-MASTER";
+    if (cleanCode === masterKey) {
+      localStorage.setItem('barakat_activated', 'true');
+      localStorage.setItem('barakat_activation_code_used', masterKey);
+      setUserRole('admin');
+      setIsActivated(true);
+      setIsActivating(false);
+      return;
+    }
+    
+    try {
+      // Pour éviter les conflits de lecture concurrentes, on relit l'état à jour depuis Supabase
+      const { data, error } = await supabase
+        .from('barakat_planning')
+        .select('*')
+        .eq('id', 'activation_info')
+        .maybeSingle();
+        
+      if (error) throw error;
+      
+      let currentCodes: ActivationCode[] = [];
+      if (data && Array.isArray(data.courses)) {
+        currentCodes = data.courses as ActivationCode[];
+      } else {
+        // Enregistrement inexistant, on considère qu'aucun code n'a encore été créé.
+        currentCodes = [
+          { code: 'BKT-942-AZE', isUsed: false },
+          { code: 'BKT-108-WXC', isUsed: false },
+          { code: 'BKT-551-NJK', isUsed: false },
+          { code: 'BKT-304-TYP', isUsed: false }
+        ];
+        
+        await supabase.from('barakat_planning').upsert({
+          id: 'activation_info',
+          classes: [],
+          teachers: [],
+          rooms: [],
+          subjects: [],
+          courses: currentCodes,
+          updated_at: new Date().toISOString()
+        });
+      }
+      
+      const foundIdx = currentCodes.findIndex(c => c.code.toUpperCase() === cleanCode);
+      if (foundIdx === -1) {
+        setActivationError("Code d'activation incorrect ou inexistant. Veuillez contacter votre administrateur.");
+        setIsActivating(false);
+        return;
+      }
+      
+      const foundCode = currentCodes[foundIdx];
+      if (foundCode.isUsed) {
+        setActivationError(`Ce code d'activation à usage unique a déjà été utilisé sur un autre terminal.`);
+        setIsActivating(false);
+        return;
+      }
+      
+      // Marquer comme utilisé
+      const updatedCodes = [...currentCodes];
+      updatedCodes[foundIdx] = {
+        ...foundCode,
+        isUsed: true,
+        usedAt: new Date().toISOString(),
+        usedBy: 'Appareil Client'
+      };
+      
+      // Enregistrer dans Supabase
+      const { error: saveError } = await supabase
+        .from('barakat_planning')
+        .upsert({
+          id: 'activation_info',
+          classes: [],
+          teachers: [],
+          rooms: [],
+          subjects: [],
+          courses: updatedCodes,
+          updated_at: new Date().toISOString()
+        });
+        
+      if (saveError) throw saveError;
+      
+      // Mettre à jour l'état local et localStorage
+      localStorage.setItem('barakat_activated', 'true');
+      localStorage.setItem('barakat_activation_code_used', cleanCode);
+      setUserRole('professor');
+      setActiveTab('dashboard');
+      
+      setActivationCodes(updatedCodes);
+      setIsActivated(true);
+    } catch (err: any) {
+      console.error(err);
+      setActivationError(`Une erreur s'est produite lors de la connexion réseau : ${err.message}`);
+    } finally {
+      setIsActivating(false);
+    }
+  };
+
+  // Charger les codes d'activation dès que l'accès de l'utilisateur est légitime
+  useEffect(() => {
+    if (isActivated) {
+      handleLoadActivationCodes();
+    }
+  }, [isActivated]);
 
   // Kick off Supabase boot load on start
   useEffect(() => {
@@ -688,91 +977,137 @@ export default function App() {
 
   const currentGridCourses = getFilteredCoursesForGrid();
 
+  if (isDomainLocked) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 relative overflow-hidden font-sans select-none">
+        {/* Background alert highlights */}
+        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[500px] h-[500px] bg-red-650/10 rounded-full blur-3xl pointer-events-none"></div>
+
+        <div className="w-full max-w-lg bg-slate-900/60 backdrop-blur-2xl border border-red-900/30 p-8 md:p-10 rounded-3xl shadow-2xl relative z-10 text-center border-t-4 border-t-red-500">
+          <div className="mx-auto w-16 h-16 bg-red-550/15 border border-red-500/20 text-red-555 rounded-full flex items-center justify-center mb-6">
+            <Shield className="h-8 w-8 text-red-550 animate-pulse" />
+          </div>
+
+          <h1 className="text-sm font-black tracking-[0.25em] text-red-500 uppercase leading-none">
+            ERREUR DE LICENCE
+          </h1>
+          <h2 className="text-xl font-black text-white mt-3 uppercase tracking-tight font-sans">
+            INSTANCE NON AUTORISÉE
+          </h2>
+          
+          <div className="h-[2px] w-12 bg-red-950 rounded-full my-6 mx-auto"></div>
+
+          <p className="text-xs text-slate-300 leading-relaxed text-center px-2">
+            Le code de sécurité et de droit d'auteur du logiciel <strong>BARAKATPLANNING</strong> interdit formellement le clonage, la reproduction ou la redistribution brute de ses fichiers sur un domaine non enregistré.
+          </p>
+          
+          <p className="text-xs text-slate-400 mt-4 leading-relaxed text-center px-4 bg-slate-950/40 p-3.5 border border-slate-900 rounded-2xl font-mono">
+            Hébergement détecté : <span className="text-red-400 font-bold">{window.location.hostname}</span> <br/>
+            Statut : <strong>ACCÈS SUSPENDU PAR LE SERVEUR</strong>
+          </p>
+
+          <p className="text-[10px] text-slate-500 leading-normal mt-6">
+            Pour acquérir ou transférer votre licence sur un autre serveur d'établissement scolaire, contactez le titulaire exclusif des droits d'exploitation.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isActivated) {
+    return (
+      <div className="min-h-screen bg-[#faf8f5] flex flex-col items-center justify-center p-4 relative overflow-hidden font-sans">
+        {/* Background decorative elements */}
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-[#ee7b11]/5 rounded-full blur-3xl pointer-events-none"></div>
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-[#0b4998]/5 rounded-full blur-3xl pointer-events-none"></div>
+
+        <div className="w-full max-w-md bg-white border border-slate-200/80 p-8 rounded-3xl shadow-xl relative z-10 transition-all duration-300">
+          
+          {/* Brand Logo Header */}
+          <div className="flex flex-col items-center text-center mb-6">
+            <div className="mb-4 transform hover:scale-105 transition duration-300">
+              <BrandLogo className="h-20" />
+            </div>
+            
+            <h2 className="text-xs font-bold text-slate-700 tracking-wide mt-2">
+              Planificateur scolaire — Accès Sécurisé
+            </h2>
+            <p className="text-[11px] text-slate-500 mt-2 leading-relaxed max-w-xs">
+              Cette application est réservée à l'usage exclusif de l'administration et des enseignants pour {schoolName} ({schoolSubName}).
+            </p>
+          </div>
+
+          <form onSubmit={handleVerifyAndActivate} className="space-y-4">
+            <div>
+              <label htmlFor="activation-code" className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2 text-center">
+                Clé d'administration / Enseignant
+              </label>
+              <div className="relative">
+                <input
+                  id="activation-code"
+                  type="text"
+                  placeholder="EX: BKT-XYZ-123"
+                  value={activationCodeInput}
+                  onChange={(e) => {
+                    setActivationCodeInput(e.target.value);
+                    if (activationError) setActivationError('');
+                  }}
+                  autoFocus
+                  required
+                  className="w-full px-4 py-3 bg-stone-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 font-mono text-center text-sm font-bold tracking-widest focus:outline-none focus:ring-2 focus:ring-[#0b4998] focus:border-[#0b4998] uppercase transition"
+                />
+              </div>
+            </div>
+
+            {activationError && (
+              <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-650 rounded-xl text-xs font-semibold leading-relaxed flex items-start gap-2.5">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                <span>{activationError}</span>
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={isActivating || !activationCodeInput.trim()}
+              className="w-full py-3 bg-[#0b4998] hover:bg-[#093d80] disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold rounded-xl text-xs uppercase tracking-widest transition flex items-center justify-center gap-2 cursor-pointer border border-[#0b4998] shadow-md hover:shadow-lg"
+            >
+              {isActivating ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                  <span>Vérification cloud...</span>
+                </>
+              ) : (
+                <>
+                  <Check className="h-4 w-4" />
+                  <span>Démarrer l'application</span>
+                </>
+              )}
+            </button>
+          </form>
+
+          {/* Device details help */}
+          <div className="mt-8 pt-5 border-t border-slate-100 text-center">
+            <p className="text-[9px] text-slate-400 leading-normal">
+              Accès restreint — validé en temps réel auprès du serveur cloud pour l'établissement scolaire.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans">
       
       {/* Upper Navigation Header */}
-      <header id="edu-header" className="bg-slate-900 text-white shadow-xl border-b border-indigo-950 shrink-0">
+      <header id="edu-header" className="bg-[#0b4998] text-white shadow-xl border-b border-[#f3aa1c]/30 shrink-0">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
+          <div className="flex items-center justify-between h-16 gap-4">
             
             {/* Brand Logo */}
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-gradient-to-tr from-indigo-500 to-indigo-700 rounded-xl shadow-lg shadow-indigo-500/20">
-                <Calendar className="h-6 w-6 text-white" />
-              </div>
-              <div className="flex flex-col">
-                <h1 className="text-sm font-black tracking-widest bg-gradient-to-r from-white to-slate-200 bg-clip-text text-transparent uppercase leading-none">
-                  BARAKAT
-                </h1>
-                <span className="text-[10px] font-extrabold tracking-[0.25em] text-indigo-300 uppercase leading-none mt-1">
-                  PLANNING
-                </span>
-                <p className="text-[8px] text-indigo-400 font-bold tracking-wide uppercase mt-1 leading-none">
-                  Planificateur scolaire
-                </p>
-              </div>
+            <div className="flex items-center shrink-0">
+              <BrandLogo isDarkBackground={true} className="h-10 sm:h-11" />
             </div>
-
-            {/* Main Tabs (Admin Role Only) */}
-            {userRole === 'admin' && (
-              <nav className="hidden md:flex space-x-1">
-                <button
-                  onClick={() => setActiveTab('dashboard')}
-                  className={`cursor-pointer px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
-                    activeTab === 'dashboard' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                  }`}
-                >
-                  <LayoutDashboard className="h-4 w-4" />
-                  <span>Tableau de bord</span>
-                </button>
-                <button
-                  onClick={() => setActiveTab('schedule')}
-                  className={`cursor-pointer px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
-                    activeTab === 'schedule' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                  }`}
-                >
-                  <Calendar className="h-4 w-4" />
-                  <span>Planificateur Grille</span>
-                </button>
-                <button
-                  onClick={() => setActiveTab('teachers')}
-                  className={`cursor-pointer px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
-                    activeTab === 'teachers' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                  }`}
-                >
-                  <Users className="h-4 w-4" />
-                  <span>Professeurs</span>
-                </button>
-                <button
-                  onClick={() => setActiveTab('rooms')}
-                  className={`cursor-pointer px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
-                    activeTab === 'rooms' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                  }`}
-                >
-                  <School className="h-4 w-4" />
-                  <span>Salles</span>
-                </button>
-                <button
-                  onClick={() => setActiveTab('classes')}
-                  className={`cursor-pointer px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
-                    activeTab === 'classes' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                  }`}
-                >
-                  <GraduationCap className="h-4 w-4" />
-                  <span>Classes</span>
-                </button>
-                <button
-                  onClick={() => setActiveTab('subjects')}
-                  className={`cursor-pointer px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
-                    activeTab === 'subjects' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                  }`}
-                >
-                  <BookOpen className="h-4 w-4" />
-                  <span>Matières</span>
-                </button>
-              </nav>
-            )}
 
             {/* Profile / Role Selector switches */}
             <div className="flex items-center gap-3">
@@ -782,7 +1117,7 @@ export default function App() {
                   setUserRole('admin');
                   setActiveTab('dashboard');
                 }}
-                className="cursor-pointer hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border bg-slate-800 border-slate-705 hover:border-indigo-900 transition text-slate-300"
+                className="cursor-pointer hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border bg-slate-900/40 border-slate-700/50 hover:border-[#f3aa1c]/50 transition text-slate-300"
                 title="Statut de la synchronisation Supabase - Cliquez pour accéder au tableau de bord."
               >
                 <Database className={`h-3.5 w-3.5 ${
@@ -802,84 +1137,126 @@ export default function App() {
                 </span>
               </div>
 
-              <div className="flex bg-slate-800 p-1 rounded-xl border border-slate-750">
-                <button
-                  onClick={() => {
-                    setUserRole('admin');
-                    setActiveTab('dashboard');
-                  }}
-                  className={`cursor-pointer px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-                    userRole === 'admin' 
-                      ? 'bg-indigo-650 text-white shadow-sm' 
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  Admin
-                </button>
-                <button
-                  onClick={() => {
-                    setUserRole('professor');
-                    setIsAiDrawerOpen(false);
-                  }}
-                  className={`cursor-pointer px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
-                    userRole === 'professor' 
-                      ? 'bg-rose-650 text-white shadow-sm' 
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <User className="h-3 w-3" />
-                  <span>Enseignant</span>
-                </button>
-              </div>
+              {localStorage.getItem('barakat_activation_code_used') === "BKT-ADMIN-789-MASTER" && (
+                <div className="flex bg-[#093d80] p-1 rounded-xl border border-white/10">
+                  <button
+                    onClick={() => {
+                      setUserRole('admin');
+                      setActiveTab('dashboard');
+                    }}
+                    className={`cursor-pointer px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                      userRole === 'admin' 
+                        ? 'bg-[#ee7b11] text-white shadow-sm' 
+                        : 'text-blue-100 hover:text-white'
+                    }`}
+                  >
+                    Admin
+                  </button>
+                  <button
+                    onClick={() => {
+                      setUserRole('professor');
+                      setIsAiDrawerOpen(false);
+                    }}
+                    className={`cursor-pointer px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+                      userRole === 'professor' 
+                        ? 'bg-[#f3aa1c] text-stone-900 shadow-sm' 
+                        : 'text-blue-100 hover:text-white'
+                    }`}
+                  >
+                    <User className="h-3 w-3" />
+                    <span>Enseignant</span>
+                  </button>
+                </div>
+              )}
 
               {/* AI assistant removed for white-labeling */}
             </div>
 
           </div>
         </div>
-      </header>
 
-      {/* Mobile navigation header list */}
-      {userRole === 'admin' && (
-        <div className="md:hidden bg-slate-800 text-sm border-b border-slate-700 flex overflow-x-auto whitespace-nowrap scrollbar-none px-4 py-2 gap-1 shrink-0">
-          <button 
-            onClick={() => setActiveTab('dashboard')} 
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${activeTab === 'dashboard' ? 'bg-indigo-600 text-white' : 'text-slate-300'}`}
-          >
-            Dashboard
-          </button>
-          <button 
-            onClick={() => setActiveTab('schedule')} 
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${activeTab === 'schedule' ? 'bg-indigo-600 text-white' : 'text-slate-300'}`}
-          >
-            Grille Horaires
-          </button>
-          <button 
-            onClick={() => setActiveTab('teachers')} 
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${activeTab === 'teachers' ? 'bg-indigo-600 text-white' : 'text-slate-300'}`}
-          >
-            Professeurs
-          </button>
-          <button 
-            onClick={() => setActiveTab('rooms')} 
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${activeTab === 'rooms' ? 'bg-indigo-600 text-white' : 'text-slate-300'}`}
-          >
-            Salles
-          </button>
-          <button 
-            onClick={() => setActiveTab('classes')} 
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${activeTab === 'classes' ? 'bg-indigo-600 text-white' : 'text-slate-300'}`}
-          >
-            Classes
-          </button>
-          <button 
-            onClick={() => setActiveTab('subjects')} 
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${activeTab === 'subjects' ? 'bg-indigo-600 text-white' : 'text-slate-300'}`}
-          >
-            Matières
-          </button>
-        </div>
-      )}
+        {/* Unified Administrative Sub-bar Tabs for Admin Role */}
+        {userRole === 'admin' && (
+          <div className="bg-[#093d80] border-t border-[#f3aa1c]/15">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+              <nav className="flex items-center justify-start md:justify-center gap-1 sm:gap-2 py-2 overflow-x-auto scrollbar-none whitespace-nowrap">
+                <button
+                  onClick={() => setActiveTab('dashboard')}
+                  className={`cursor-pointer px-3 py-1.5 sm:py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
+                    activeTab === 'dashboard' ? 'bg-[#ee7b11] text-white shadow-md' : 'text-blue-100 hover:bg-[#072c5e] hover:text-white'
+                  }`}
+                >
+                  <LayoutDashboard className="h-4 w-4" />
+                  <span>Tableau de bord</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('stats')}
+                  className={`cursor-pointer px-3 py-1.5 sm:py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
+                    activeTab === 'stats' ? 'bg-[#ee7b11] text-white shadow-md' : 'text-blue-100 hover:bg-[#072c5e] hover:text-white'
+                  }`}
+                >
+                  <BarChart3 className="h-4 w-4" />
+                  <span>Statistiques</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('schedule')}
+                  className={`cursor-pointer px-3 py-1.5 sm:py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
+                    activeTab === 'schedule' ? 'bg-[#ee7b11] text-white shadow-md' : 'text-blue-100 hover:bg-[#072c5e] hover:text-white'
+                  }`}
+                >
+                  <Calendar className="h-4 w-4" />
+                  <span>Planificateur Grille</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('teachers')}
+                  className={`cursor-pointer px-3 py-1.5 sm:py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
+                    activeTab === 'teachers' ? 'bg-[#ee7b11] text-white shadow-md' : 'text-blue-100 hover:bg-[#072c5e] hover:text-white'
+                  }`}
+                >
+                  <Users className="h-4 w-4" />
+                  <span>Professeurs</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('rooms')}
+                  className={`cursor-pointer px-3 py-1.5 sm:py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
+                    activeTab === 'rooms' ? 'bg-[#ee7b11] text-white shadow-md' : 'text-blue-100 hover:bg-[#072c5e] hover:text-white'
+                  }`}
+                >
+                  <School className="h-4 w-4" />
+                  <span>Salles</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('classes')}
+                  className={`cursor-pointer px-3 py-1.5 sm:py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
+                    activeTab === 'classes' ? 'bg-[#ee7b11] text-white shadow-md' : 'text-blue-100 hover:bg-[#072c5e] hover:text-white'
+                  }`}
+                >
+                  <GraduationCap className="h-4 w-4" />
+                  <span>Classes</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('subjects')}
+                  className={`cursor-pointer px-3 py-1.5 sm:py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
+                    activeTab === 'subjects' ? 'bg-[#ee7b11] text-white shadow-md' : 'text-blue-100 hover:bg-[#072c5e] hover:text-white'
+                  }`}
+                >
+                  <BookOpen className="h-4 w-4" />
+                  <span>Matières</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('settings')}
+                  className={`cursor-pointer px-3 py-1.5 sm:py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
+                    activeTab === 'settings' ? 'bg-[#ee7b11] text-white shadow-md' : 'text-blue-100 hover:bg-[#072c5e] hover:text-white'
+                  }`}
+                >
+                  <Settings className="h-4 w-4" />
+                  <span>Paramètres</span>
+                </button>
+              </nav>
+            </div>
+          </div>
+        )}
+      </header>
 
       {/* Main Workspace Frame */}
       <div className="flex-1 flex flex-col md:flex-row relative min-h-0 overflow-hidden">
@@ -906,6 +1283,10 @@ export default function App() {
                   isSyncing={isSyncing}
                   onSaveToSupabase={handleSaveToSupabase}
                   onLoadFromSupabase={handleLoadFromSupabase}
+                  activationCodes={activationCodes}
+                  onGenerateNewCode={handleGenerateNewCode}
+                  onDeleteActivationCode={handleDeleteActivationCode}
+                  schoolName={schoolName}
                 />
               )}
 
@@ -987,7 +1368,7 @@ export default function App() {
                       <div className="flex justify-between items-end">
                         <div className="space-y-1">
                           <div className="text-[10px] text-indigo-600 font-extrabold tracking-widest uppercase">
-                            BARAKATPLANNING — PLANIFICATEUR OFFICIEL DE COURS
+                            {schoolName} — {schoolSubName}
                           </div>
                           <h1 className="text-2xl font-black text-slate-950 uppercase tracking-tight">
                             {calendarFilterType === 'class' && `Emploi du Temps : Classe de ${classes.find(c => c.id === selectedFilterValue)?.name || selectedFilterValue}`}
@@ -995,7 +1376,7 @@ export default function App() {
                             {calendarFilterType === 'room' && `Affectation de la Salle : ${rooms.find(r => r.id === selectedFilterValue)?.name || selectedFilterValue}`}
                           </h1>
                           <p className="text-xs text-slate-600 font-semibold">
-                            Fiche d'apprentissage officielle de l'établissement scolaire — Année Académique 2026-2027
+                            Fiche d'apprentissage officielle de l'établissement scolaire — Année Académique {academicYear}
                           </p>
                         </div>
                         <div className="text-right">
@@ -1672,6 +2053,42 @@ export default function App() {
                   </div>
                 </div>
               )}
+
+              {/* TAB: App Settings */}
+              {activeTab === 'settings' && (
+                <SettingsTab
+                  schoolName={schoolName}
+                  setSchoolName={setSchoolName}
+                  schoolSubName={schoolSubName}
+                  setSchoolSubName={setSchoolSubName}
+                  academicYear={academicYear}
+                  setAcademicYear={setAcademicYear}
+                  schoolAddress={schoolAddress}
+                  setSchoolAddress={setSchoolAddress}
+                  schoolPhone={schoolPhone}
+                  setSchoolPhone={setSchoolPhone}
+                  schoolEmail={schoolEmail}
+                  setSchoolEmail={setSchoolEmail}
+                  schoolDirector={schoolDirector}
+                  setSchoolDirector={setSchoolDirector}
+                  schoolMotto={schoolMotto}
+                  setSchoolMotto={setSchoolMotto}
+                />
+              )}
+
+              {/* TAB: App Statistics */}
+              {activeTab === 'stats' && (
+                <StatsTab
+                  teachers={teachers}
+                  classes={classes}
+                  subjects={subjects}
+                  rooms={rooms}
+                  courses={courses}
+                  conflicts={conflicts}
+                  schoolName={schoolName}
+                  academicYear={academicYear}
+                />
+              )}
             </>
           ) : (
             // ================= PROFESSOR ROLE VIEWS =================
@@ -1734,13 +2151,13 @@ export default function App() {
                   <div className="flex justify-between items-end">
                     <div className="space-y-1">
                       <div className="text-[10px] text-rose-600 font-extrabold tracking-widest uppercase">
-                        PORTAIL ACADÉMIQUE ENSEIGNANT — BARAKATPLANNING
+                        {schoolName} — {schoolSubName}
                       </div>
                       <h1 className="text-2xl font-black text-slate-950 uppercase tracking-tight">
                         Emploi du Temps personnel : {teachers.find(t => t.id === selectedProfPortalId)?.name || selectedProfPortalId}
                       </h1>
-                      <p className="text-xs text-slate-600 font-semibold">
-                        Garantie d'absence réglementaire et ordonnancement — Année Scolaire 2026-2027
+                      <p className="text-xs text-slate-600 font-semibold font-sans">
+                        Garantie d'absence réglementaire et ordonnancement — Année Scolaire {academicYear}
                       </p>
                     </div>
                     <div className="text-right">

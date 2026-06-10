@@ -83,3 +83,11 @@ export const TIME_SLOTS: TimeSlot[] = [
   { id: 'A2', name: 'A2 (15h00 - 16h00)', start: '15:00', end: '16:00' },
   { id: 'A3', name: 'A3 (16h15 - 17h15)', start: '16:15', end: '17:15' }
 ];
+
+export interface ActivationCode {
+  code: string;
+  isUsed: boolean;
+  usedAt?: string;
+  usedBy?: string;
+}
+
