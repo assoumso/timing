@@ -9,7 +9,8 @@ import {
   Conflict, 
   DAYS, 
   TIME_SLOTS,
-  ActivationCode
+  ActivationCode,
+  UserAccount
 } from './types';
 import { 
   INITIAL_CLASSES, 
@@ -17,15 +18,30 @@ import {
   INITIAL_ROOMS, 
   INITIAL_SUBJECTS, 
   INITIAL_COURSES,
-  COLOR_CLASSES
+  COLOR_CLASSES,
+  INITIAL_ACCOUNTS
 } from './data';
 import { checkAllConflicts } from './utils/conflictChecker';
 import DashboardTab from './components/DashboardTab';
 import { BrandLogo } from './components/BrandLogo';
 import { SettingsTab } from './components/SettingsTab';
 import { StatsTab } from './components/StatsTab';
-import { AutocompleteSelect, MultiAutocompleteSelect } from './components/AutocompleteSelect';
-import type { SelectOption } from './components/AutocompleteSelect';
+import { AccountantTab } from './components/AccountantTab';
+import { SupervisorTab } from './components/SupervisorTab';
+import { ParentTab } from './components/ParentTab';
+import { StudentDashboard } from './components/StudentDashboard';
+
+// Custom School ERP Module Imports
+import LoginModule from './components/LoginModule';
+import SchoolErpDashboard from './components/SchoolErpDashboard';
+import AdministrationModule from './components/AdministrationModule';
+import StudentModule from './components/StudentModule';
+import TeacherErpModule from './components/TeacherErpModule';
+import AcademicModule from './components/AcademicModule';
+import EvaluationModule from './components/EvaluationModule';
+import AttendanceModule from './components/AttendanceModule';
+import FinancialModule from './components/FinancialModule';
+import PeripheralErpModules from './components/PeripheralErpModules';
 import { 
   Calendar, 
   LayoutDashboard, 
@@ -52,7 +68,15 @@ import {
   Database,
   Printer,
   Settings,
-  BarChart3
+  BarChart3,
+  Heart,
+  Coins,
+  UserCheck,
+  RefreshCw,
+  Award,
+  Layers,
+  ChevronDown,
+  Menu
 } from 'lucide-react';
 
 export default function App() {
@@ -79,7 +103,9 @@ export default function App() {
   });
 
   // UI Navigation states
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'schedule' | 'teachers' | 'rooms' | 'classes' | 'subjects' | 'settings' | 'stats'>('dashboard');
+  const [activeTab, setActiveTab] = useState<string>('school_erp_dashboard');
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
   
   // Custom establishment settings states
   const [schoolName, setSchoolName] = useState(() => localStorage.getItem('barakat_school_name') || "ÉCOLE DES FAMILLES");
@@ -91,10 +117,45 @@ export default function App() {
   const [schoolDirector, setSchoolDirector] = useState(() => localStorage.getItem('barakat_school_director') || "Mme Catherine Amon");
   const [schoolMotto, setSchoolMotto] = useState(() => localStorage.getItem('barakat_school_motto') || "Éducation - Valeurs - Excellence");
 
-  const [userRole, setUserRole] = useState<'admin' | 'professor'>(() => {
-    const code = localStorage.getItem('barakat_activation_code_used') || '';
-    return code === "BKT-ADMIN-789-MASTER" ? 'admin' : 'professor';
+  // User accounts list (Administrator/Director created users support)
+  const [userAccounts, setUserAccounts] = useState<UserAccount[]>(() => {
+    const saved = localStorage.getItem('barakat_user_accounts');
+    return saved ? JSON.parse(saved) : INITIAL_ACCOUNTS;
   });
+
+  const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => {
+    const saved = localStorage.getItem('barakat_current_user');
+    return saved ? JSON.parse(saved) : null;
+  });
+
+  const [userRole, setUserRole] = useState<'super_admin' | 'director' | 'accountant' | 'supervisor' | 'teacher' | 'parent' | 'student'>(() => {
+    const savedUser = localStorage.getItem('barakat_current_user');
+    if (savedUser) {
+      const parsed = JSON.parse(savedUser) as UserAccount;
+      return parsed.role;
+    }
+    const code = localStorage.getItem('barakat_activation_code_used') || '';
+    const stored = localStorage.getItem('barakat_user_profile_role');
+    if (stored) return stored as any;
+    return code === "BKT-ADMIN-789-MASTER" ? 'super_admin' : 'student';
+  });
+
+  // Keep userAccounts synchronized with localStorage
+  useEffect(() => {
+    localStorage.setItem('barakat_user_accounts', JSON.stringify(userAccounts));
+  }, [userAccounts]);
+
+  // Sync userRole and session storage when currentUser changes
+  useEffect(() => {
+    if (currentUser) {
+      setUserRole(currentUser.role);
+      localStorage.setItem('barakat_user_profile_role', currentUser.role);
+      localStorage.setItem('barakat_current_user', JSON.stringify(currentUser));
+    } else {
+      localStorage.removeItem('barakat_current_user');
+    }
+  }, [currentUser]);
+
   const [isDomainLocked, setIsDomainLocked] = useState(false);
 
   // Security locks for Host / Domain locking (anti-copy/anti-clone) and right-click block
@@ -104,8 +165,7 @@ export default function App() {
       'localhost',
       '127.0.0.1',
       'run.app',
-      'google.com',
-      'vercel.app'
+      'google.com'
     ];
     
     const isAllowed = allowedDomains.some(domain => hostname.includes(domain));
@@ -144,10 +204,34 @@ export default function App() {
   
   // Selection filter for standard calendar
   const [calendarFilterType, setCalendarFilterType] = useState<'class' | 'teacher' | 'room'>('class');
-  const [selectedFilterValue, setSelectedFilterValue] = useState<string[]>(['6A']);
+  const [selectedFilterValue, setSelectedFilterValue] = useState<string>('6A');
 
   // Teacher portal state variables
   const [selectedProfPortalId, setSelectedProfPortalId] = useState<string>('prof_martin');
+
+  // Shared state for reported absences
+  const [reportedAbsences, setReportedAbsences] = useState<Array<{ teacherId: string, dayId: string, slotId: string }>>(() => {
+    const saved = localStorage.getItem('barakat_reported_absences');
+    return saved ? JSON.parse(saved) : [
+      { teacherId: 'prof_koffi', dayId: 'Mon', slotId: 'M2' } // demonstration default
+    ];
+  });
+
+  const handleUpdateAbsences = (newAbsences: Array<{ teacherId: string, dayId: string, slotId: string }>) => {
+    setReportedAbsences(newAbsences);
+    localStorage.setItem('barakat_reported_absences', JSON.stringify(newAbsences));
+  };
+
+  // Director visa schedule validation badge
+  const [isScheduleValidated, setIsScheduleValidated] = useState<boolean>(() => {
+    return localStorage.getItem('barakat_schedule_validated') === 'true';
+  });
+
+  const handleToggleScheduleValidation = () => {
+    const nextState = !isScheduleValidated;
+    setIsScheduleValidated(nextState);
+    localStorage.setItem('barakat_schedule_validated', nextState ? 'true' : 'false');
+  };
 
   // Conflicts list derived state
   const [conflicts, setConflicts] = useState<Conflict[]>([]);
@@ -168,8 +252,6 @@ export default function App() {
   const [wizardHoursCount, setWizardHoursCount] = useState(2);
   const [isWizardLoading, setIsWizardLoading] = useState(false);
   const [wizardLog, setWizardLog] = useState('');
-  const [isGeneratingAll, setIsGeneratingAll] = useState(false);
-  const [generateAllLog, setGenerateAllLog] = useState('');
 
   // Course planner modals
   const [isAddEditCourseModalOpen, setIsAddEditCourseModalOpen] = useState(false);
@@ -542,11 +624,11 @@ export default function App() {
   // Handle auto filter defaults when filter categories change
   useEffect(() => {
     if (calendarFilterType === 'class' && classes.length > 0) {
-      setSelectedFilterValue([classes[0].id]);
+      setSelectedFilterValue(classes[0].id);
     } else if (calendarFilterType === 'teacher' && teachers.length > 0) {
-      setSelectedFilterValue([teachers[0].id]);
+      setSelectedFilterValue(teachers[0].id);
     } else if (calendarFilterType === 'room' && rooms.length > 0) {
-      setSelectedFilterValue([rooms[0].id]);
+      setSelectedFilterValue(rooms[0].id);
     }
   }, [calendarFilterType]);
 
@@ -581,12 +663,15 @@ export default function App() {
   // Switch filter selection to class instantly
   const handleNavigateToClassAndFilter = (classId: string) => {
     setCalendarFilterType('class');
-    setSelectedFilterValue([classId]);
+    setSelectedFilterValue(classId);
     setActiveTab('schedule');
   };
 
   // Open planning modal for specific slot
-  const handleOpenSlotModal = (dayId: string, slotId: string, existingCourse?: ScheduleCourse, filterContextId?: string) => {
+  const handleOpenSlotModal = (dayId: string, slotId: string, existingCourse?: ScheduleCourse) => {
+    if (userRole !== 'super_admin') {
+      return; // Consultation mode only
+    }
     setModalTargetDay(dayId);
     setModalTargetSlot(slotId);
     
@@ -599,12 +684,12 @@ export default function App() {
     } else {
       setEditingCourseId(null);
       // Try to pre-fill logically based on current filter state
-      setModalClassId(calendarFilterType === 'class' ? (filterContextId || selectedFilterValue[0] || classes[0]?.id || '') : (classes[0]?.id || ''));
-      setModalTeacherId(calendarFilterType === 'teacher' ? (filterContextId || selectedFilterValue[0] || teachers[0]?.id || '') : (teachers[0]?.id || ''));
-      setModalRoomId(calendarFilterType === 'room' ? (filterContextId || selectedFilterValue[0] || rooms[0]?.id || '') : (rooms[0]?.id || ''));
+      setModalClassId(calendarFilterType === 'class' ? selectedFilterValue : (classes[0]?.id || ''));
+      setModalTeacherId(calendarFilterType === 'teacher' ? selectedFilterValue : (teachers[0]?.id || ''));
+      setModalRoomId(calendarFilterType === 'room' ? selectedFilterValue : (rooms[0]?.id || ''));
       setModalSubjectId(subjects[0]?.id || '');
     }
- 
+
     setIsAddEditCourseModalOpen(true);
   };
 
@@ -706,75 +791,6 @@ export default function App() {
     } finally {
       setIsWizardLoading(false);
     }
-  };
-
-  // Génération IA pour TOUTES les classes en un seul coup
-  const handleGenerateAllClasses = async () => {
-    if (classes.length === 0) {
-      alert('Aucune classe enregistrée.');
-      return;
-    }
-    if (!window.confirm(`Lancer la génération automatique de l'emploi du temps pour toutes les ${classes.length} classes avec la matière et le professeur sélectionnés ?`)) return;
-
-    setIsGeneratingAll(true);
-    setGenerateAllLog('⏳ Démarrage de la génération globale...');
-
-    // Construire les besoins pour toutes les classes
-    const requirements = classes.map(cls => ({
-      classId: cls.id,
-      subjectId: wizardSubject,
-      teacherId: wizardTeacher,
-      roomId: wizardRoom,
-      count: wizardHoursCount
-    }));
-
-    let allAdded: any[] = [];
-    let currentCourses = [...courses];
-
-    for (let i = 0; i < requirements.length; i++) {
-      const req = requirements[i];
-      const className = classes.find(c => c.id === req.classId)?.name || req.classId;
-      setGenerateAllLog(prev => prev + `\n🔄 [${i + 1}/${requirements.length}] Planification de la classe ${className}...`);
-
-      try {
-        const response = await fetch('/api/gemini/generate-auto', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            classes,
-            teachers,
-            rooms,
-            currentCourses: currentCourses,
-            requirementsToScheduleByClass: [req]
-          })
-        });
-
-        const resData = await response.json();
-        if (resData.success && Array.isArray(resData.courses) && resData.courses.length > 0) {
-          allAdded = [...allAdded, ...resData.courses];
-          currentCourses = [...currentCourses, ...resData.courses];
-          setGenerateAllLog(prev => prev + ` ✅ ${resData.courses.length} cours ajoutés.`);
-        } else {
-          setGenerateAllLog(prev => prev + ` ⚠️ Aucun créneau trouvé.`);
-        }
-      } catch (e: any) {
-        setGenerateAllLog(prev => prev + ` ❌ Erreur: ${e.message}`);
-      }
-    }
-
-    if (allAdded.length > 0) {
-      setCourses(prev => [...prev, ...allAdded]);
-      setGenerateAllLog(prev => prev + `\n\n🎉 Terminé ! ${allAdded.length} cours insérés pour ${classes.length} classes.`);
-      setAiChatHistory(prev => [
-        ...prev,
-        { role: 'user', text: `Génère automatiquement l'emploi du temps pour toutes les classes` },
-        { role: 'model', text: `J'ai planifié **${allAdded.length} cours** répartis sur **${classes.length} classes** sans créer de conflit. Tous les créneaux ont été insérés directement dans la grille de planification !` }
-      ]);
-    } else {
-      setGenerateAllLog(prev => prev + '\n\n⚠️ Aucun cours n\'a pu être généré. Vérifiez vos données (professeurs, salles, disponibilités).');
-    }
-
-    setIsGeneratingAll(false);
   };
 
   // Submit chat prompt to Gemini suggestion engine
@@ -1035,17 +1051,17 @@ export default function App() {
 
   // Filter courses depending on actual user selection
   const getFilteredCoursesForGrid = (): ScheduleCourse[] => {
-    if (userRole === 'professor') {
+    if (userRole === 'teacher') {
       return courses.filter(c => c.teacherId === selectedProfPortalId);
     }
 
     // Role admin filtered
     if (calendarFilterType === 'class') {
-      return courses.filter(c => selectedFilterValue.includes(c.classId));
+      return courses.filter(c => c.classId === selectedFilterValue);
     } else if (calendarFilterType === 'teacher') {
-      return courses.filter(c => selectedFilterValue.includes(c.teacherId));
+      return courses.filter(c => c.teacherId === selectedFilterValue);
     } else {
-      return courses.filter(c => selectedFilterValue.includes(c.roomId));
+      return courses.filter(c => c.roomId === selectedFilterValue);
     }
   };
 
@@ -1170,28 +1186,123 @@ export default function App() {
     );
   }
 
+  // FORCE LOGIN IF CURRENT USER IS NOT LOGGED IN
+  if (!currentUser) {
+    return (
+      <LoginModule 
+        userAccounts={userAccounts}
+        schoolName={schoolName}
+        onLoginSuccess={(user) => {
+          setCurrentUser(user);
+          // Set appropriate workspace tab upon login
+          if (user.role === 'super_admin' || user.role === 'director') {
+            setActiveTab('school_erp_dashboard');
+          } else if (user.role === 'accountant') {
+            setActiveTab('portal_accountant');
+          } else if (user.role === 'supervisor') {
+            setActiveTab('portal_supervisor');
+          } else if (user.role === 'teacher') {
+            setActiveTab('portal_teacher');
+          } else if (user.role === 'parent') {
+            setActiveTab('portal_parent');
+          } else {
+            setActiveTab('portal_student');
+          }
+        }}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans">
       
       {/* Upper Navigation Header */}
-      <header id="edu-header" className="bg-[#0b4998] text-white shadow-xl border-b border-[#f3aa1c]/30 shrink-0">
+      <header id="edu-header" className="bg-[#0b4998] text-white shadow-xl border-b border-[#f3aa1c]/30 shrink-0 no-print">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16 gap-4">
+          <div className="flex flex-col md:flex-row items-center justify-between py-3 md:h-16 gap-3">
             
-            {/* Brand Logo */}
-            <div className="flex items-center shrink-0">
-              <BrandLogo isDarkBackground={true} className="h-10 sm:h-11" />
+            {/* Brand Logo & Mobile Toggle */}
+            <div className="flex items-center justify-between w-full md:w-auto shrink-0">
+              <BrandLogo isDarkBackground={true} className="h-9 sm:h-10" />
+              
+              <button
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className="md:hidden cursor-pointer p-2 rounded-xl bg-slate-900/35 hover:bg-[#ee7b11]/30 text-white transition border border-white/10"
+                title="Déplier le Menu Général"
+              >
+                <Menu className="h-5 w-5" />
+              </button>
             </div>
 
-            {/* Profile / Role Selector switches */}
-            <div className="flex items-center gap-3">
-              {/* Supabase connection status pill */}
+            {/* Middle: Centered Profile Selector Dropdown */}
+            <div className="flex items-center justify-center flex-1">
+              <div className="relative inline-flex items-center gap-2 bg-[#093d80] hover:bg-[#072c5e] border border-white/10 hover:border-[#f3aa1c]/25 rounded-2xl px-3.5 py-1.5 transition-all shadow-inner">
+                <span className="text-[10px] font-black tracking-wider uppercase text-[#f3aa1c] select-none animate-pulse">
+                  Espace Actif :
+                </span>
+                <select
+                  value={userRole}
+                  onChange={(e) => {
+                    const selectedRole = e.target.value as any;
+                    setUserRole(selectedRole);
+                    localStorage.setItem('barakat_user_profile_role', selectedRole);
+                    if (selectedRole === 'super_admin' || selectedRole === 'director') {
+                      setActiveTab('school_erp_dashboard');
+                    } else if (selectedRole === 'accountant') {
+                      setActiveTab('portal_accountant');
+                    } else if (selectedRole === 'supervisor') {
+                      setActiveTab('portal_supervisor');
+                    } else if (selectedRole === 'teacher') {
+                      setActiveTab('portal_teacher');
+                    } else if (selectedRole === 'parent') {
+                      setActiveTab('portal_parent');
+                    } else {
+                      setActiveTab('portal_student');
+                    }
+                  }}
+                  className="bg-transparent border-none text-white text-xs font-black tracking-wide focus:outline-none cursor-pointer rounded-md outline-none pr-1 uppercase"
+                >
+                  <option value="super_admin" className="text-slate-950 font-bold">👑 Super Admin (Gestion Globale)</option>
+                  <option value="director" className="text-slate-950 font-bold">⚖️ Directeur’Établissement (Visa)</option>
+                  <option value="accountant" className="text-slate-950 font-bold">💼 Comptable (Indemnités & Finances)</option>
+                  <option value="supervisor" className="text-slate-950 font-bold">🛡️ Surveillant Général (Absences)</option>
+                  <option value="teacher" className="text-slate-950 font-bold">👨‍🏫 Portail Enseignant (Contraintes)</option>
+                  <option value="parent" className="text-slate-950 font-bold">👨‍👩‍👦 Portail Parent (Suivi Écolage)</option>
+                  <option value="student" className="text-slate-950 font-bold">🎓 Portail Élève (Mon Planning)</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Right: Active Profile and Supabase connection status pill */}
+            <div className="flex items-center gap-3 shrink-0">
+              {/* Dynamic Logged-in Profile Chip */}
+              <div className="flex items-center gap-2 bg-slate-900/35 border border-white/10 px-3 py-1.5 rounded-xl">
+                <div className="h-6 w-6 rounded-lg bg-[#ee7b11] text-white font-black text-xs flex items-center justify-center uppercase shadow-inner">
+                  {currentUser?.name?.substring(0, 1) || 'U'}
+                </div>
+                <div className="hidden lg:block text-left">
+                  <span className="text-[10px] font-black block text-white leading-tight truncate max-w-[120px]">{currentUser?.name}</span>
+                  <span className="text-[8px] font-bold text-[#f3aa1c] block capitalize leading-none">{userRole === 'super_admin' ? 'administrateur' : userRole}</span>
+                </div>
+                <button
+                  onClick={() => {
+                    localStorage.removeItem('barakat_current_user');
+                    setCurrentUser(null);
+                  }}
+                  className="cursor-pointer text-white/80 hover:text-white bg-white/5 hover:bg-white/15 px-2 py-1 rounded-md text-[9px] font-black uppercase transition border border-white/10 ml-1.5"
+                  title="Se Déconnecter de la session"
+                >
+                  🚪 Déconnexion
+                </button>
+              </div>
+
               <div 
                 onClick={() => {
-                  setUserRole('admin');
-                  setActiveTab('dashboard');
+                  if (userRole === 'super_admin' || userRole === 'director') {
+                    setActiveTab('dashboard');
+                  }
                 }}
-                className="cursor-pointer hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border bg-slate-900/40 border-slate-700/50 hover:border-[#f3aa1c]/50 transition text-slate-300"
+                className="cursor-pointer flex items-center gap-1.5 px-3 py-1.5 rounded-xl border bg-slate-900/40 border-slate-700/50 hover:border-[#f3aa1c]/50 transition text-slate-300"
                 title="Statut de la synchronisation Supabase - Cliquez pour accéder au tableau de bord."
               >
                 <Database className={`h-3.5 w-3.5 ${
@@ -1199,137 +1310,191 @@ export default function App() {
                   supabaseStatus === 'connecting' ? 'text-amber-400 animate-spin' : 
                   supabaseStatus === 'error_tables' ? 'text-red-400 animate-pulse' : 'text-slate-400'
                 }`} />
-              <span className="text-[10px] font-bold text-slate-400">État :</span>
+                <span className="text-[10px] font-bold text-slate-400">Db:</span>
                 <span className={`text-[10px] font-extrabold ${
                   supabaseStatus === 'synced' ? 'text-emerald-400' : 
                   supabaseStatus === 'connecting' ? 'text-amber-400' : 
-                  supabaseStatus === 'error_tables' ? 'text-red-400' : 'text-slate-400'
+                  supabaseStatus === 'error_tables' ? 'text-[#ee7b11]' : 'text-slate-400'
                 }`}>
-                  {supabaseStatus === 'synced' ? 'Connecté à la base de données' : 
-                   supabaseStatus === 'connecting' ? 'Connexion en cours...' : 
-                   supabaseStatus === 'error_tables' ? 'Erreur base de données' : 'Base de données hors ligne'}
+                  {supabaseStatus === 'synced' ? 'LIVE' : 
+                   supabaseStatus === 'connecting' ? 'SYNC...' : 
+                   supabaseStatus === 'error_tables' ? 'REQUIS' : 'LOCAL'}
                 </span>
               </div>
-
-              {localStorage.getItem('barakat_activation_code_used') === "BKT-ADMIN-789-MASTER" && (
-                <div className="flex bg-[#093d80] p-1 rounded-xl border border-white/10">
-                  <button
-                    onClick={() => {
-                      setUserRole('admin');
-                      setActiveTab('dashboard');
-                    }}
-                    className={`cursor-pointer px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-                      userRole === 'admin' 
-                        ? 'bg-[#ee7b11] text-white shadow-sm' 
-                        : 'text-blue-100 hover:text-white'
-                    }`}
-                  >
-                    Admin
-                  </button>
-                  <button
-                    onClick={() => {
-                      setUserRole('professor');
-                      setIsAiDrawerOpen(false);
-                    }}
-                    className={`cursor-pointer px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
-                      userRole === 'professor' 
-                        ? 'bg-[#f3aa1c] text-stone-900 shadow-sm' 
-                        : 'text-blue-100 hover:text-white'
-                    }`}
-                  >
-                    <User className="h-3 w-3" />
-                    <span>Enseignant</span>
-                  </button>
-                </div>
-              )}
-
-              {/* AI assistant removed for white-labeling */}
             </div>
 
           </div>
         </div>
 
-        {/* Unified Administrative Sub-bar Tabs for Admin Role */}
-        {userRole === 'admin' && (
-          <div className="bg-[#093d80] border-t border-[#f3aa1c]/15">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <nav className="flex items-center justify-start md:justify-center gap-1 sm:gap-2 py-2 overflow-x-auto scrollbar-none whitespace-nowrap">
-                <button
-                  onClick={() => setActiveTab('dashboard')}
-                  className={`cursor-pointer px-3 py-1.5 sm:py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
-                    activeTab === 'dashboard' ? 'bg-[#ee7b11] text-white shadow-md' : 'text-blue-100 hover:bg-[#072c5e] hover:text-white'
-                  }`}
-                >
-                  <LayoutDashboard className="h-4 w-4" />
-                  <span>Tableau de bord</span>
-                </button>
-                <button
-                  onClick={() => setActiveTab('stats')}
-                  className={`cursor-pointer px-3 py-1.5 sm:py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
-                    activeTab === 'stats' ? 'bg-[#ee7b11] text-white shadow-md' : 'text-blue-100 hover:bg-[#072c5e] hover:text-white'
-                  }`}
-                >
-                  <BarChart3 className="h-4 w-4" />
-                  <span>Statistiques</span>
-                </button>
-                <button
-                  onClick={() => setActiveTab('schedule')}
-                  className={`cursor-pointer px-3 py-1.5 sm:py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
-                    activeTab === 'schedule' ? 'bg-[#ee7b11] text-white shadow-md' : 'text-blue-100 hover:bg-[#072c5e] hover:text-white'
-                  }`}
-                >
-                  <Calendar className="h-4 w-4" />
-                  <span>Planificateur Grille</span>
-                </button>
-                <button
-                  onClick={() => setActiveTab('teachers')}
-                  className={`cursor-pointer px-3 py-1.5 sm:py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
-                    activeTab === 'teachers' ? 'bg-[#ee7b11] text-white shadow-md' : 'text-blue-100 hover:bg-[#072c5e] hover:text-white'
-                  }`}
-                >
-                  <Users className="h-4 w-4" />
-                  <span>Professeurs</span>
-                </button>
-                <button
-                  onClick={() => setActiveTab('rooms')}
-                  className={`cursor-pointer px-3 py-1.5 sm:py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
-                    activeTab === 'rooms' ? 'bg-[#ee7b11] text-white shadow-md' : 'text-blue-100 hover:bg-[#072c5e] hover:text-white'
-                  }`}
-                >
-                  <School className="h-4 w-4" />
-                  <span>Salles</span>
-                </button>
-                <button
-                  onClick={() => setActiveTab('classes')}
-                  className={`cursor-pointer px-3 py-1.5 sm:py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
-                    activeTab === 'classes' ? 'bg-[#ee7b11] text-white shadow-md' : 'text-blue-100 hover:bg-[#072c5e] hover:text-white'
-                  }`}
-                >
-                  <GraduationCap className="h-4 w-4" />
-                  <span>Classes</span>
-                </button>
-                <button
-                  onClick={() => setActiveTab('subjects')}
-                  className={`cursor-pointer px-3 py-1.5 sm:py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
-                    activeTab === 'subjects' ? 'bg-[#ee7b11] text-white shadow-md' : 'text-blue-100 hover:bg-[#072c5e] hover:text-white'
-                  }`}
-                >
-                  <BookOpen className="h-4 w-4" />
-                  <span>Matières</span>
-                </button>
-                <button
-                  onClick={() => setActiveTab('settings')}
-                  className={`cursor-pointer px-3 py-1.5 sm:py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
-                    activeTab === 'settings' ? 'bg-[#ee7b11] text-white shadow-md' : 'text-blue-100 hover:bg-[#072c5e] hover:text-white'
-                  }`}
-                >
-                  <Settings className="h-4 w-4" />
-                  <span>Paramètres</span>
-                </button>
-              </nav>
+        {/* Modern Unified Category-based Dropdown Navigation System */}
+        {(() => {
+          const menuCategories = [
+            {
+              id: "erp",
+              label: "📊 Gestion & Scolarité (ERP)",
+              items: [
+                { id: "school_erp_dashboard", name: "Tableau de Bord Global", icon: <LayoutDashboard className="h-4 w-4 text-[#f3aa1c]" />, desc: "Vue d'ensemble de l'établissement" },
+                { id: "erp_students", name: "Gestion des Élèves", icon: <GraduationCap className="h-4 w-4 text-sky-500" />, desc: "Inscriptions, effectifs et dossiers" },
+                { id: "erp_teachers", name: "Enseignants & Équipes", icon: <Users className="h-4 w-4 text-emerald-500" />, desc: "Dossiers de l'administration scolaire" },
+                { id: "erp_attendance", name: "Registre d'Appels & Absences", icon: <Clock className="h-4 w-4 text-rose-500" />, desc: "Suivi des présences et des appels" },
+                { id: "erp_financial", name: "Scolarités & Caisses", icon: <Coins className="h-4 w-4 text-amber-500" />, desc: "Paiements, écolages, bourses & salaires" },
+                { id: "erp_peripheral", name: "Biblio & Diffusions", icon: <Layers className="h-4 w-4 text-violet-500" />, desc: "Matériels de l'école et annonces" },
+              ]
+            },
+            {
+              id: "academic",
+              label: "📝 Pédagogie & Notes",
+              items: [
+                { id: "erp_academic", name: "Syllabus & Progression", icon: <BookOpen className="h-4 w-4 text-[#0b4998]" />, desc: "Progression et cahier de textes" },
+                { id: "erp_evaluations", name: "Notes & Bulletins", icon: <Award className="h-4 w-4 text-[#ee7b11]" />, desc: "Saisie de notes et calcul des moyennes" },
+              ]
+            },
+            {
+              id: "schedule",
+              label: "📅 Emplois du Temps (EDT)",
+              items: [
+                { id: "dashboard", name: "EDT - Grille Interactive", icon: <Calendar className="h-4 w-4 text-[#ee7b11]" />, desc: "Consulter la grille générale" },
+                { id: "schedule", name: "EDT - Ordonnanceur IA", icon: <Sparkles className="h-4 w-4 text-indigo-500 animate-pulse" />, desc: "Génération automatique sans conflits" },
+                { id: "rooms", name: "EDT - Salles de Cours", icon: <School className="h-4 w-4 text-emerald-500" />, desc: "Occupation des salles et laboratoires" },
+                { id: "classes", name: "EDT - Classes & Séries", icon: <UserCheck className="h-4 w-4 text-sky-500" />, desc: "Attribuer les créneaux par classe" },
+                { id: "subjects", name: "EDT - Matières de l'École", icon: <BookOpen className="h-4 w-4 text-purple-500" />, desc: "Matières, coefficients et grilles" },
+                { id: "stats", name: "EDT - Rapports & Conflits", icon: <BarChart3 className="h-4 w-4 text-rose-500" />, desc: "Suivi des heurts et statistiques d'heures" },
+              ]
+            },
+            {
+              id: "portails",
+              label: "🔑 Portails Dédiés",
+              items: [
+                { id: "portal_accountant", name: "Espace Comptable Dédié", icon: <Coins className="h-4 w-4 text-emerald-500" />, desc: "Fiches de salaire & émargements" },
+                { id: "portal_supervisor", name: "Portail Surveillant Général", icon: <Shield className="h-4 w-4 text-amber-500" />, desc: "Suivi rapide des retards et absences" },
+                { id: "portal_teacher", name: "Espace Enseignant Individuel", icon: <Users className="h-4 w-4 text-[#ee7b11]" />, desc: "Consulter planning et indisponibilités" },
+                { id: "portal_parent", name: "Espace Parent d'Élève", icon: <Users className="h-4 w-4 text-teal-500" />, desc: "Paiements, bulletins & retards" },
+                { id: "portal_student", name: "Portail Élève Personnel", icon: <GraduationCap className="h-4 w-4 text-[#0b4998]" />, desc: "Mon emploi du temps" },
+                { id: "erp_admin", name: "comptes & Structure Administrative", icon: <Settings className="h-4 w-4 text-rose-500" />, desc: "Gestion des utilisateurs & configuration" },
+                { id: "settings", name: "Paramètres Techniques & Démo", icon: <Settings className="h-4 w-4 text-slate-500" />, desc: "Rétablir données ou se connecter" },
+              ]
+            }
+          ];
+
+          return (
+            <div className="bg-[#093d80] border-t border-[#f3aa1c]/25 relative z-40">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                
+                {/* Desktop Navigation */}
+                <nav className="hidden md:flex items-center justify-center flex-wrap gap-2 py-2">
+                  {menuCategories.map((cat) => {
+                    const isOpen = openDropdown === cat.id;
+                    const isCatActive = cat.items.some(item => item.id === activeTab);
+                    
+                    return (
+                      <div 
+                        key={cat.id} 
+                        className="relative"
+                        onMouseEnter={() => setOpenDropdown(cat.id)}
+                        onMouseLeave={() => setOpenDropdown(null)}
+                      >
+                        <button
+                          onClick={() => setOpenDropdown(isOpen ? null : cat.id)}
+                          className={`cursor-pointer px-3 py-2 rounded-xl text-[10.5px] font-black uppercase tracking-wider flex items-center gap-1.5 transition ${
+                            isCatActive 
+                              ? 'bg-[#ee7b11] text-white shadow-md' 
+                              : 'text-blue-105 hover:bg-[#072c5e] hover:text-white'
+                          }`}
+                        >
+                          <span>{cat.label}</span>
+                          <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+                        </button>
+
+                        {/* Submenu List */}
+                        {isOpen && (
+                          <div className="absolute left-1/2 -translate-x-1/2 mt-1 w-72 bg-white rounded-2xl shadow-2xl border border-slate-200/80 py-2 z-50 text-slate-800">
+                            {cat.items.map((item) => {
+                              const isItemActive = activeTab === item.id;
+                              return (
+                                <button
+                                  key={item.id}
+                                  onClick={() => {
+                                    setActiveTab(item.id);
+                                    setOpenDropdown(null);
+                                  }}
+                                  className={`cursor-pointer w-full px-4 py-2 flex items-start gap-3 text-left hover:bg-slate-50 transition border-l-2 ${
+                                    isItemActive 
+                                      ? 'bg-[#ee7b11]/10 border-[#ee7b11]' 
+                                      : 'border-transparent hover:border-slate-350'
+                                  }`}
+                                >
+                                  <div className={`mt-0.5 p-1 rounded-lg ${isItemActive ? 'bg-[#ee7b11]/15 text-[#ee7b11]' : 'bg-slate-100 text-slate-600'}`}>
+                                    {item.icon}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className={`text-[11.5px] font-black ${isItemActive ? 'text-[#ee7b11]' : 'text-slate-800'}`}>
+                                      {item.name}
+                                    </p>
+                                    <p className="text-[9.5px] text-slate-450 font-semibold truncate leading-snug">
+                                      {item.desc}
+                                    </p>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </nav>
+
+                {/* Mobile Navigation Collapsible List */}
+                {mobileMenuOpen && (
+                  <div className="md:hidden py-4 border-t border-[#f3aa1c]/15 space-y-4 text-left max-h-[70vh] overflow-y-auto">
+                    <div className="p-3 bg-slate-950/40 rounded-2xl mb-2 text-center">
+                      <p className="text-[10px] font-black uppercase text-[#f3aa1c] leading-none mb-1">🧭 Navigation Multi-Espaces</p>
+                      <p className="text-[9px] text-slate-300 font-semibold">Toutes les fonctionnalités et portails d'accès sont disponibles ci-dessous.</p>
+                    </div>
+
+                    {menuCategories.map((cat) => (
+                      <div key={cat.id} className="space-y-1 bg-slate-950/20 p-2.5 rounded-2xl border border-white/5">
+                        <h4 className="text-[10px] font-black text-[#f3aa1c] uppercase tracking-wider block px-2 mb-1.5 border-b border-[#f3aa1c]/10 pb-1">
+                          {cat.label}
+                        </h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {cat.items.map((item) => {
+                            const isItemActive = activeTab === item.id;
+                            return (
+                              <button
+                                key={item.id}
+                                onClick={() => {
+                                  setActiveTab(item.id);
+                                  setMobileMenuOpen(false);
+                                }}
+                                className={`cursor-pointer px-3 py-2 rounded-xl flex items-center gap-2.5 text-left transition ${
+                                  isItemActive 
+                                    ? 'bg-[#ee7b11] text-white font-black shadow-md' 
+                                    : 'bg-white/5 hover:bg-white/10 text-blue-100 hover:text-white'
+                                }`}
+                              >
+                                <div className={`p-1 rounded-lg ${isItemActive ? 'bg-white/20 text-white' : 'bg-slate-900/35 text-slate-350'}`}>
+                                  {item.icon}
+                                </div>
+                                <div className="min-w-0">
+                                  <span className="text-xs font-bold block truncate">{item.name}</span>
+                                  <span className={`text-[8.5px] block truncate ${isItemActive ? 'text-white/85' : 'text-slate-400'}`}>
+                                    {item.desc}
+                                  </span>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
       </header>
 
       {/* Main Workspace Frame */}
@@ -1338,9 +1503,109 @@ export default function App() {
         {/* Central screen content */}
         <main className="flex-1 overflow-y-auto px-4 py-6 sm:px-6 lg:px-8 max-w-7xl w-full mx-auto">
           
-          {userRole === 'admin' ? (
-            // ================= ADMIN ROLE VIEWS =================
             <>
+              {/* BRAND NEW ERP SCHOOL SYSTEM DASHBOARD OVERVIEWS */}
+              {activeTab === 'school_erp_dashboard' && (
+                <SchoolErpDashboard 
+                  classes={classes}
+                  teachers={teachers}
+                  rooms={rooms}
+                  courses={courses}
+                  isScheduleValidated={isScheduleValidated}
+                  schoolName={schoolName}
+                  academicYear={academicYear}
+                  onNavigateToModule={setActiveTab}
+                />
+              )}
+
+              {activeTab === 'erp_admin' && (
+                <AdministrationModule 
+                  subjects={subjects}
+                  classes={classes}
+                  schoolName={schoolName}
+                  setSchoolName={setSchoolName}
+                  schoolSubName={schoolSubName}
+                  setSchoolSubName={setSchoolSubName}
+                  academicYear={academicYear}
+                  setAcademicYear={setAcademicYear}
+                  schoolDirector={schoolDirector}
+                  setSchoolDirector={setSchoolDirector}
+                  schoolPhone={schoolPhone}
+                  setSchoolPhone={setSchoolPhone}
+                  schoolEmail={schoolEmail}
+                  setSchoolEmail={setSchoolEmail}
+                  schoolAddress={schoolAddress}
+                  setSchoolAddress={setSchoolAddress}
+                  schoolMotto={schoolMotto}
+                  setSchoolMotto={setSchoolMotto}
+                  userAccounts={userAccounts}
+                  setUserAccounts={setUserAccounts}
+                />
+              )}
+
+              {activeTab === 'erp_students' && (
+                <StudentModule 
+                  classes={classes}
+                  schoolName={schoolName}
+                  schoolSubName={schoolSubName}
+                  schoolMotto={schoolMotto}
+                  academicYear={academicYear}
+                />
+              )}
+
+              {activeTab === 'erp_teachers' && (
+                <TeacherErpModule 
+                  teachers={teachers}
+                  setTeachers={setTeachers}
+                  subjects={subjects}
+                  classes={classes}
+                  courses={courses}
+                />
+              )}
+
+              {activeTab === 'erp_academic' && (
+                <AcademicModule 
+                  classes={classes}
+                  subjects={subjects}
+                />
+              )}
+
+              {activeTab === 'erp_evaluations' && (
+                <EvaluationModule 
+                  classes={classes}
+                  subjects={subjects}
+                  schoolName={schoolName}
+                  schoolSubName={schoolSubName}
+                  schoolMotto={schoolMotto}
+                  academicYear={academicYear}
+                  schoolDirector={schoolDirector}
+                />
+              )}
+
+              {activeTab === 'erp_attendance' && (
+                <AttendanceModule 
+                  classes={classes}
+                  teachers={teachers}
+                />
+              )}
+
+              {activeTab === 'erp_financial' && (
+                <FinancialModule 
+                  classes={classes}
+                  schoolName={schoolName}
+                  schoolSubName={schoolSubName}
+                  schoolMotto={schoolMotto}
+                  academicYear={academicYear}
+                  schoolDirector={schoolDirector}
+                />
+              )}
+
+              {activeTab === 'erp_peripheral' && (
+                <PeripheralErpModules 
+                  classes={classes}
+                />
+              )}
+
               {activeTab === 'dashboard' && (
                 <DashboardTab 
                   classes={classes}
@@ -1361,11 +1626,168 @@ export default function App() {
                   onGenerateNewCode={handleGenerateNewCode}
                   onDeleteActivationCode={handleDeleteActivationCode}
                   schoolName={schoolName}
+                  isEditable={userRole === 'super_admin'}
+                  isScheduleValidated={isScheduleValidated}
+                  onToggleScheduleValidation={handleToggleScheduleValidation}
+                  schoolDirector={schoolDirector}
+                  academicYear={academicYear}
                 />
               )}
 
               {activeTab === 'schedule' && (
                 <div className="space-y-6">
+                  {/* Générateur d'Emploi du Temps Intelligent Panel */}
+                  <div className="no-print bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 border border-[#f3aa1c]/30 rounded-3xl p-5 md:p-6 text-white shadow-lg space-y-4">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-3 border-b border-white/10">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2.5 rounded-2xl bg-[#ee7b11]/25 border border-[#f3aa1c]/30">
+                          <Sparkles className="h-5 w-5 text-[#f3aa1c] animate-pulse" />
+                        </div>
+                        <div>
+                          <h2 className="text-base font-black tracking-tight flex flex-wrap items-center gap-2">
+                            <span>Générateur Automatique d’Emploi du Temps</span>
+                            <span className="text-[10px] font-black uppercase tracking-wider bg-[#ee7b11] text-white px-2 py-0.5 rounded-full">Assistant IA d'Ordonnancement</span>
+                          </h2>
+                          <p className="text-xs text-slate-300">
+                            Notre algorithme calcule l'affectation optimale sans conflit en vérifiant instantanément l'occupation des professeurs et des salles.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="bg-white/5 border border-white/10 rounded-2xl p-2.5 text-[10.5px] max-w-sm text-slate-300">
+                        ⚖️ <span>Le planificateur garantit qu'aucun professeur n'a de cours en doublon et respecte la capacité des salles.</span>
+                      </div>
+                    </div>
+
+                    {userRole === 'super_admin' ? (
+                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
+                        
+                        {/* Interactive Selector Inputs Form */}
+                        <div className="lg:col-span-8 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                          <div className="space-y-1">
+                            <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-wider">Matière</label>
+                            <select 
+                              value={wizardSubject} 
+                              onChange={(e) => {
+                                const subVal = e.target.value;
+                                setWizardSubject(subVal);
+                                const matchedSub = subjects.find(s => s.id === subVal);
+                                if (matchedSub?.recommendedTeacherId) {
+                                  setWizardTeacher(matchedSub.recommendedTeacherId);
+                                }
+                              }}
+                              className="w-full bg-slate-800 border border-slate-700 focus:border-[#f3aa1c] p-2 rounded-xl text-xs font-bold text-white focus:outline-none"
+                            >
+                              {subjects.map(s => (
+                                <option key={s.id} value={s.id} className="bg-slate-900 text-white">{s.name}</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-wider">Enseignant qualifié</label>
+                            <select 
+                              value={wizardTeacher} 
+                              onChange={(e) => setWizardTeacher(e.target.value)}
+                              className="w-full bg-slate-800 border border-slate-700 focus:border-[#f3aa1c] p-2 rounded-xl text-xs font-bold text-white focus:outline-none"
+                            >
+                              {teachers.map(t => (
+                                <option key={t.id} value={t.id} className="bg-slate-900 text-white">{t.name}</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-wider">Groupe classe cible</label>
+                            <select 
+                              value={wizardClass} 
+                              onChange={(e) => setWizardClass(e.target.value)}
+                              className="w-full bg-slate-800 border border-slate-700 focus:border-[#f3aa1c] p-2 rounded-xl text-xs font-bold text-white focus:outline-none"
+                            >
+                              {classes.map(c => (
+                                <option key={c.id} value={c.id} className="bg-slate-900 text-white">{c.name} ({c.capacity} él.)</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-wider">Salle d'accueil</label>
+                            <select 
+                              value={wizardRoom} 
+                              onChange={(e) => setWizardRoom(e.target.value)}
+                              className="w-full bg-slate-800 border border-slate-700 focus:border-[#f3aa1c] p-2 rounded-xl text-xs font-bold text-white focus:outline-none"
+                            >
+                              {rooms.map(r => (
+                                <option key={r.id} value={r.id} className="bg-slate-900 text-white">{r.name} ({r.type}, Cap Max {r.capacity})</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-wider">Volume horaire (heures d'études)</label>
+                            <input 
+                              type="number" 
+                              min="1" 
+                              max="10" 
+                              value={wizardHoursCount} 
+                              onChange={(e) => setWizardHoursCount(parseInt(e.target.value) || 1)}
+                              className="w-full bg-slate-800 border border-slate-700 focus:border-[#f3aa1c] p-1.5 rounded-xl text-xs font-bold text-white focus:outline-none"
+                            />
+                          </div>
+
+                          <div className="flex items-end shadow-xs">
+                            <button
+                              type="button"
+                              onClick={handleTriggerWizardGeneration}
+                              disabled={isWizardLoading}
+                              className="cursor-pointer w-full py-2 px-3 rounded-xl bg-[#ee7b11] hover:bg-[#d66f0e] active:scale-95 text-white font-extrabold text-xs transition flex items-center justify-center gap-1.5 disabled:opacity-40"
+                            >
+                              {isWizardLoading ? (
+                                <>
+                                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                                  <span>Calcul en cours...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Sparkles className="h-3.5 w-3.5 text-[#f3aa1c]" />
+                                  <span>Générer sans conflit</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Interactive live log terminal box */}
+                        <div className="lg:col-span-4 bg-slate-950/75 border border-white/5 rounded-2xl p-4 flex flex-col justify-between min-h-[120px]">
+                          <div>
+                            <span className="text-[8.5px] font-black tracking-widest text-[#f3aa1c] uppercase block mb-1">
+                              Moniteur d'ordonnancement live
+                            </span>
+                            <div className="text-[10px] leading-relaxed font-mono text-slate-300 overflow-y-auto max-h-[72px]">
+                              {wizardLog ? (
+                                <div className="text-emerald-300 animate-pulse whitespace-pre-line font-bold flex items-start gap-1">
+                                  <span>⚙️</span>
+                                  <span>{wizardLog}</span>
+                                </div>
+                              ) : (
+                                <span className="italic text-slate-550">Prêt. Sélectionnez vos paramètres et cliquez sur "Générer" pour intégrer vos cours de manière optimale sur la grille.</span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="text-[9px] text-slate-500 font-semibold border-t border-white/5 mt-2 pt-1">
+                            Calcul automatique basé sur les heures libres de l'ensemble de l'établissement.
+                          </div>
+                        </div>
+
+                      </div>
+                    ) : (
+                      // Read-only info notice (e.g., Director is in consultation mode or cannot edit)
+                      <div className="p-3.5 bg-white/5 border border-white/10 rounded-2xl text-[11px] text-slate-300 flex items-center gap-2 font-medium">
+                        <span>⚖️</span>
+                        <span>L'I.A. de génération automatique est accessible en modification pour le profil **Super Admin**. Votre espace actuel vous permet d'inspecter les affectations et de signer officiellement ce planning d'enseignement.</span>
+                      </div>
+                    )}
+                  </div>
+
                   {/* Calendar controller controls */}
                   <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4 no-print">
                     <div className="flex flex-wrap items-center gap-3">
@@ -1396,23 +1818,24 @@ export default function App() {
                         </button>
                       </div>
  
-                      {/* Autocomplete multi-select filtrable */}
+                      {/* Dropdown selector for dynamic filters state */}
                       <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-semibold text-slate-400">Ciblé :</span>
-                        <MultiAutocompleteSelect
-                          className="min-w-[220px]"
-                          values={selectedFilterValue}
-                          onChange={setSelectedFilterValue}
-                          placeholder="Sélectionner..."
-                          selectAllLabel={calendarFilterType === 'class' ? 'Toutes les classes' : calendarFilterType === 'teacher' ? 'Tous les professeurs' : 'Toutes les salles'}
-                          options={
-                            calendarFilterType === 'class'
-                              ? classes.map(c => ({ value: c.id, label: c.name, sub: `${c.capacity} élèves` }))
-                              : calendarFilterType === 'teacher'
-                              ? teachers.map(t => ({ value: t.id, label: t.name, sub: t.subjects.map(sid => subjects.find(s => s.id === sid)?.name || sid).join(', ') }))
-                              : rooms.map(r => ({ value: r.id, label: r.name, sub: `${r.type} — ${r.capacity} places` }))
-                          }
-                        />
+                        <span className="text-xs font-semibold text-slate-400">Ciblé:</span>
+                        <select
+                          value={selectedFilterValue}
+                          onChange={(e) => setSelectedFilterValue(e.target.value)}
+                          className="px-3 py-1.5 bg-white border border-slate-200 hover:border-slate-300 rounded-xl text-xs font-semibold text-slate-800"
+                        >
+                          {calendarFilterType === 'class' && classes.map(c => (
+                            <option key={c.id} value={c.id}>{c.name} ({c.capacity} él.)</option>
+                          ))}
+                          {calendarFilterType === 'teacher' && teachers.map(t => (
+                            <option key={t.id} value={t.id}>{t.name}</option>
+                          ))}
+                          {calendarFilterType === 'room' && rooms.map(r => (
+                            <option key={r.id} value={r.id}>{r.name} - ({r.type}, Cap: {r.capacity})</option>
+                          ))}
+                        </select>
                       </div>
                     </div>
  
@@ -1425,224 +1848,195 @@ export default function App() {
                         <Printer className="h-4 w-4 text-emerald-400" />
                         <span>Imprimer en A4 Landscape</span>
                       </button>
+
                       <div className="text-xs text-slate-500 font-semibold italic flex items-center gap-1 bg-indigo-550/10 text-indigo-900 border border-indigo-150 rounded-xl px-3 py-1.5">
                         <Info className="h-3.5 w-3.5 shrink-0" />
                         <span>Cliquez sur une heure pour planifier.</span>
                       </div>
                     </div>
                   </div>
-
+ 
                   {/* Dynamic schedule grid display */}
-                  <div className="space-y-6 print:space-y-0">
-                    {selectedFilterValue.map((singleFilter, idx) => {
-                      const matchedCourses = (() => {
-                        if (calendarFilterType === 'class') {
-                          return courses.filter(c => c.classId === singleFilter);
-                        } else if (calendarFilterType === 'teacher') {
-                          return courses.filter(c => c.teacherId === singleFilter);
-                        } else {
-                          return courses.filter(c => c.roomId === singleFilter);
-                        }
-                      })();
-
-                      const titleLabel = (() => {
-                        if (calendarFilterType === 'class') {
-                          return `Classe de ${classes.find(c => c.id === singleFilter)?.name || singleFilter}`;
-                        } else if (calendarFilterType === 'teacher') {
-                          return `Enseignant : ${teachers.find(t => t.id === singleFilter)?.name || singleFilter}`;
-                        } else {
-                          return `Salle : ${rooms.find(r => r.id === singleFilter)?.name || singleFilter}`;
-                        }
-                      })();
-
-                      return (
-                        <div 
-                          key={singleFilter} 
-                          className={`bg-white border border-slate-200 rounded-3xl p-4 md:p-6 shadow-sm overflow-x-auto print:border-none print:p-0 print:shadow-none ${
-                            idx > 0 ? 'print-page-break mt-6 print:mt-0' : ''
-                          }`}
-                        >
-                          {/* Title block on screen (to see which grid it is if multiple classes are selected) */}
-                          {selectedFilterValue.length > 1 && (
-                            <div className="mb-4 pb-2 border-b border-slate-100 flex justify-between items-center no-print">
-                              <span className="text-xs font-black text-indigo-950 uppercase tracking-wide bg-indigo-50 px-3 py-1.5 rounded-xl border border-indigo-100">
-                                {titleLabel}
-                              </span>
-                            </div>
-                          )}
-
-                          {/* Header d'impression professionnel visible uniquement sur l'impression papier A4 */}
-                          <div className="hidden print:block mb-6 border-b-2 border-slate-900 pb-4">
-                            <div className="flex justify-between items-end">
-                              <div className="space-y-1">
-                                <div className="text-[10px] text-indigo-600 font-extrabold tracking-widest uppercase">
-                                  {schoolName} — {schoolSubName}
-                                </div>
-                                <h1 className="text-2xl font-black text-slate-950 uppercase tracking-tight">
-                                  {calendarFilterType === 'class' && `Emploi du Temps : ${titleLabel}`}
-                                  {calendarFilterType === 'teacher' && `Emploi du Temps : ${titleLabel}`}
-                                  {calendarFilterType === 'room' && `Affectation : ${titleLabel}`}
-                                </h1>
-                                <p className="text-xs text-slate-600 font-semibold">
-                                  Fiche d'apprentissage officielle de l'établissement scolaire — Année Académique {academicYear}
-                                </p>
-                              </div>
-                              <div className="text-right">
-                                <span className="text-[10.5px] font-bold text-slate-900 block bg-slate-100 px-3 py-1 rounded-md border border-slate-200">
-                                  Fiche d'affichage A4 officielle
-                                </span>
-                                <span className="text-[9px] text-slate-400 font-mono block mt-1.5 leading-none">
-                                  Généré et imprimé le {new Date().toLocaleDateString('fr-FR')}
-                                </span>
-                              </div>
-                            </div>
+                  <div className="bg-white border border-slate-200 rounded-3xl p-4 md:p-6 shadow-sm overflow-x-auto print:border-none print:p-0 print:shadow-none">
+                    
+                    {/* Header d'impression professionnel visible uniquement sur l'impression papier A4 */}
+                    <div className="hidden print:block mb-6 border-b-2 border-slate-900 pb-4">
+                      <div className="flex justify-between items-end">
+                        <div className="space-y-1">
+                          <div className="text-[10px] text-indigo-600 font-extrabold tracking-widest uppercase">
+                            {schoolName} — {schoolSubName}
                           </div>
-
-                          <table className="w-full min-w-[700px] border-collapse">
-                            <thead>
-                              <tr>
-                                <th className="w-24 p-3 text-left text-xs font-bold text-slate-400 tracking-widest uppercase border-b border-slate-100">
-                                  Heure
-                                </th>
-                                {DAYS.map(day => (
-                                  <th 
-                                    key={day.id} 
-                                    className="p-3 text-center text-xs font-bold text-slate-700 tracking-wide uppercase border-b border-slate-100"
-                                  >
-                                    {day.name}
-                                  </th>
-                                ))}
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {TIME_SLOTS.map(slot => (
-                                <tr key={slot.id} className="group border-b border-slate-100/50 hover:bg-slate-50/30">
-                                  {/* Hour label slot cell */}
-                                  <td className="p-3 font-semibold text-xs text-slate-400 border-r border-slate-100">
-                                    <div className="font-bold text-slate-700">{slot.id}</div>
-                                    <div className="text-[10px] mt-0.5">{slot.start} - {slot.end}</div>
-                                  </td>
-
-                                  {/* Active days scheduling cell elements */}
-                                  {DAYS.map(day => {
-                                    const slotCourses = matchedCourses.filter(c => c.dayId === day.id && c.slotId === slot.id);
-                                    
-                                    // Check conflicts
-                                    const slotConflicts = conflicts.filter(c => 
-                                      slotCourses.some(mc => c.courseIds.includes(mc.id))
-                                    );
-                                    const hasError = slotConflicts.some(sc => sc.severity === 'error');
-                                    const hasWarning = slotConflicts.some(sc => sc.severity === 'warning');
-
-                                    return (
-                                      <td 
-                                        key={day.id} 
-                                        className="p-2 border-r border-slate-100 align-top min-w-[130px]"
-                                      >
-                                        {slotCourses.length > 0 ? (
-                                          <div className="space-y-2">
-                                            {slotCourses.map(course => {
-                                              const subColor = getSubjectColorClasses(course.subjectId);
-                                              const classColor = getClassColorClasses(course.classId);
-                                              const teacherObj = teachers.find(t => t.id === course.teacherId);
-                                              const roomObj = rooms.find(r => r.id === course.roomId);
-
-                                              const courseConflicts = slotConflicts.filter(sc => sc.courseIds.includes(course.id));
-                                              const isCourseInError = courseConflicts.some(sc => sc.severity === 'error');
-                                              const isCourseInWarning = courseConflicts.some(sc => sc.severity === 'warning');
-
-                                              return (
-                                                <div
-                                                  key={course.id}
-                                                  className={`group/card relative py-2.5 px-3 rounded-2xl border text-left transition hover:scale-[1.02] hover:shadow-sm ${subColor.bg} ${subColor.border} ${
-                                                    isCourseInError ? 'ring-2 ring-red-500' : isCourseInWarning ? 'ring-2 ring-amber-400' : ''
-                                                  }`}
-                                                >
-                                                  <div className="flex justify-between items-start">
-                                                    <span className="text-xs font-bold leading-tight block">
-                                                      {subjects.find(s => s.id === course.subjectId)?.name || course.subjectId}
-                                                    </span>
-                                                    
-                                                    {/* Hover interactive actions */}
-                                                    <div className="opacity-0 group-hover/card:opacity-100 flex items-center gap-1 transition ml-2">
-                                                      <button
-                                                        onClick={() => handleOpenSlotModal(day.id, slot.id, course)}
-                                                        className="cursor-pointer p-1 rounded-md text-slate-600 bg-white hover:bg-slate-150 transition border border-slate-250"
-                                                        title="Modifier"
-                                                      >
-                                                        <Edit className="h-3 w-3" />
-                                                      </button>
-                                                      <button
-                                                        onClick={() => handleDeleteCourse(course.id)}
-                                                        className="cursor-pointer p-1 rounded-md text-red-650 bg-white hover:bg-red-50 transition border border-red-200"
-                                                        title="Supprimer"
-                                                      >
-                                                        <Trash2 className="h-3 w-3" />
-                                                      </button>
-                                                    </div>
-                                                  </div>
-
-                                                  {/* Sub Details label text */}
-                                                  <div className="text-[11px] font-medium text-slate-655 mt-1 space-y-0.5">
-                                                    {calendarFilterType !== 'class' && (
-                                                      <div className="flex items-center gap-1 font-bold">
-                                                        <GraduationCap className="h-2.5 w-2.5" />
-                                                        <span>{classes.find(c => c.id === course.classId)?.name || course.classId}</span>
-                                                      </div>
-                                                    )}
-                                                    {calendarFilterType !== 'teacher' && (
-                                                      <div className="flex items-center gap-1">
-                                                        <User className="h-2.5 w-2.5" />
-                                                        <span>{teacherObj?.name || course.teacherId}</span>
-                                                      </div>
-                                                    )}
-                                                    {calendarFilterType !== 'room' && (
-                                                      <div className="flex items-center gap-1">
-                                                        <School className="h-2.5 w-2.5" />
-                                                        <span className="font-semibold">{roomObj?.name || course.roomId}</span>
-                                                      </div>
-                                                    )}
-                                                  </div>
-
-                                                  {/* Indicators if conflicts exist inside that card */}
-                                                  {courseConflicts.length > 0 && (
-                                                    <div className="mt-1.5 pt-1 border-t border-slate-200/50 flex flex-col gap-1">
-                                                      {courseConflicts.map((sc, scIdx) => (
-                                                        <div 
-                                                          key={scIdx} 
-                                                          className={`text-[9px] font-bold flex items-center gap-1 ${sc.severity === 'error' ? 'text-red-700' : 'text-amber-700'}`}
-                                                          title={sc.message}
-                                                        >
-                                                          {sc.severity === 'error' ? <AlertCircle className="h-2.5 w-2.5 inline shrink-0" /> : <AlertTriangle className="h-2.5 w-2.5 inline shrink-0" />}
-                                                          <span className="truncate max-w-[150px]">{sc.message}</span>
-                                                        </div>
-                                                      ))}
-                                                    </div>
-                                                  )}
-                                                </div>
-                                              );
-                                            })}
-                                          </div>
-                                        ) : (
-                                          // Empty slot card layout (Add Trigger)
-                                          <button
-                                            onClick={() => handleOpenSlotModal(day.id, slot.id, undefined, singleFilter)}
-                                            className="w-full text-center py-6 border border-dashed border-slate-200 rounded-2xl hover:border-indigo-400 hover:bg-indigo-50/30 text-slate-350 hover:text-indigo-600 font-bold transition flex flex-col items-center justify-center gap-1 group/empty cursor-pointer"
-                                          >
-                                            <Plus className="h-4 w-4 transform group-hover/empty:scale-110 transition shrink-0" />
-                                            <span className="text-[10px] uppercase tracking-wider font-semibold">Réserver</span>
-                                          </button>
-                                        )}
-                                      </td>
-                                    );
-                                  })}
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
+                          <h1 className="text-2xl font-black text-slate-950 uppercase tracking-tight">
+                            {calendarFilterType === 'class' && `Emploi du Temps : Classe de ${classes.find(c => c.id === selectedFilterValue)?.name || selectedFilterValue}`}
+                            {calendarFilterType === 'teacher' && `Emploi du Temps (Enseignant) : ${teachers.find(t => t.id === selectedFilterValue)?.name || selectedFilterValue}`}
+                            {calendarFilterType === 'room' && `Affectation de la Salle : ${rooms.find(r => r.id === selectedFilterValue)?.name || selectedFilterValue}`}
+                          </h1>
+                          <p className="text-xs text-slate-600 font-semibold">
+                            Fiche d'apprentissage officielle de l'établissement scolaire — Année Académique {academicYear}
+                          </p>
                         </div>
-                      );
-                    })}
+                        <div className="text-right">
+                          <span className="text-[10.5px] font-bold text-slate-900 block bg-slate-100 px-3 py-1 rounded-md border border-slate-200">
+                            Fiche d'affichage A4 officielle
+                          </span>
+                          <span className="text-[9px] text-slate-400 font-mono block mt-1.5 leading-none">
+                            Généré et imprimé le {new Date().toLocaleDateString('fr-FR')}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <table className="w-full min-w-[700px] border-collapse">
+                      <thead>
+                        <tr>
+                          <th className="w-24 p-3 text-left text-xs font-bold text-slate-400 tracking-widest uppercase border-b border-slate-100">
+                            Heure
+                          </th>
+                          {DAYS.map(day => (
+                            <th 
+                              key={day.id} 
+                              className="p-3 text-center text-xs font-bold text-slate-700 tracking-wide uppercase border-b border-slate-100"
+                            >
+                              {day.name}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {TIME_SLOTS.map(slot => (
+                          <tr key={slot.id} className="group border-b border-slate-100/50 hover:bg-slate-50/30">
+                            {/* Hour label slot cell */}
+                            <td className="p-3 font-semibold text-xs text-slate-400 border-r border-slate-100">
+                              <div className="font-bold text-slate-700">{slot.id}</div>
+                              <div className="text-[10px] mt-0.5">{slot.start} - {slot.end}</div>
+                            </td>
+
+                            {/* Active days scheduling cell elements */}
+                            {DAYS.map(day => {
+                              // Find courses scheduled at this slot matching our active view filters
+                              const matchedCourses = currentGridCourses.filter(c => c.dayId === day.id && c.slotId === slot.id);
+                              
+                              // Check if we have any conflicts involving these specific course IDs
+                              const slotConflicts = conflicts.filter(c => 
+                                matchedCourses.some(mc => c.courseIds.includes(mc.id))
+                              );
+                              const hasError = slotConflicts.some(sc => sc.severity === 'error');
+                              const hasWarning = slotConflicts.some(sc => sc.severity === 'warning');
+
+                              return (
+                                <td 
+                                  key={day.id} 
+                                  className="p-2 border-r border-slate-100 align-top min-w-[130px]"
+                                >
+                                  {matchedCourses.length > 0 ? (
+                                    <div className="space-y-2">
+                                      {matchedCourses.map(course => {
+                                        const subColor = getSubjectColorClasses(course.subjectId);
+                                        const classColor = getClassColorClasses(course.classId);
+                                        const teacherObj = teachers.find(t => t.id === course.teacherId);
+                                        const roomObj = rooms.find(r => r.id === course.roomId);
+
+                                        // Find if this particular course has warning or error conflicts on it
+                                        const courseConflicts = slotConflicts.filter(sc => sc.courseIds.includes(course.id));
+                                        const isCourseInError = courseConflicts.some(sc => sc.severity === 'error');
+                                        const isCourseInWarning = courseConflicts.some(sc => sc.severity === 'warning');
+
+                                        return (
+                                          <div
+                                            key={course.id}
+                                            className={`group/card relative py-2.5 px-3 rounded-2xl border text-left transition hover:scale-[1.02] hover:shadow-sm ${subColor.bg} ${subColor.border} ${
+                                              isCourseInError ? 'ring-2 ring-red-500' : isCourseInWarning ? 'ring-2 ring-amber-400' : ''
+                                            }`}
+                                          >
+                                            <div className="flex justify-between items-start">
+                                              <span className="text-xs font-bold leading-tight block">
+                                                {subjects.find(s => s.id === course.subjectId)?.name || course.subjectId}
+                                              </span>
+                                              
+                                              {/* Hover interactive actions */}
+                                              {userRole === 'super_admin' && (
+                                                <div className="opacity-0 group-hover/card:opacity-100 flex items-center gap-1 transition ml-2">
+                                                  <button
+                                                    onClick={() => handleOpenSlotModal(day.id, slot.id, course)}
+                                                    className="cursor-pointer p-1 rounded-md text-slate-600 bg-white hover:bg-slate-150 transition border border-slate-250"
+                                                    title="Modifier"
+                                                  >
+                                                    <Edit className="h-3 w-3" />
+                                                  </button>
+                                                  <button
+                                                    onClick={() => handleDeleteCourse(course.id)}
+                                                    className="cursor-pointer p-1 rounded-md text-red-600 bg-white hover:bg-red-50 transition border border-red-200"
+                                                    title="Supprimer"
+                                                  >
+                                                    <Trash2 className="h-3 w-3" />
+                                                  </button>
+                                                </div>
+                                              )}
+                                            </div>
+
+                                            {/* Sub Details label text */}
+                                            <div className="text-[11px] font-medium text-slate-600 mt-1 space-y-0.5">
+                                              {calendarFilterType !== 'class' && (
+                                                <div className="flex items-center gap-1 font-bold">
+                                                  <GraduationCap className="h-2.5 w-2.5" />
+                                                  <span>{classColor && classColor.font ? '' : ''}{classes.find(c => c.id === course.classId)?.name || course.classId}</span>
+                                                </div>
+                                              )}
+                                              {calendarFilterType !== 'teacher' && (
+                                                <div className="flex items-center gap-1">
+                                                  <User className="h-2.5 w-2.5" />
+                                                  <span>{teacherObj?.name || course.teacherId}</span>
+                                                </div>
+                                              )}
+                                              {calendarFilterType !== 'room' && (
+                                                <div className="flex items-center gap-1">
+                                                  <School className="h-2.5 w-2.5" />
+                                                  <span className="font-semibold">{roomObj?.name || course.roomId}</span>
+                                                </div>
+                                              )}
+                                            </div>
+
+                                            {/* Indicators if conflicts exist inside that card */}
+                                            {courseConflicts.length > 0 && (
+                                              <div className="mt-1.5 pt-1 border-t border-slate-200/50 flex flex-col gap-1">
+                                                {courseConflicts.map((sc, scIdx) => (
+                                                  <div 
+                                                    key={scIdx} 
+                                                    className={`text-[9px] font-bold flex items-center gap-1 ${sc.severity === 'error' ? 'text-red-700' : 'text-amber-700'}`}
+                                                    title={sc.message}
+                                                  >
+                                                    {sc.severity === 'error' ? <AlertCircle className="h-2.5 w-2.5 inline shrink-0" /> : <AlertTriangle className="h-2.5 w-2.5 inline shrink-0" />}
+                                                    <span className="truncate max-w-[150px]">{sc.message}</span>
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  ) : (
+                                    // Empty slot card layout (Add Trigger or static empty label)
+                                    userRole === 'super_admin' ? (
+                                      <button
+                                        onClick={() => handleOpenSlotModal(day.id, slot.id)}
+                                        className="w-full text-center py-6 border border-dashed border-slate-200 rounded-2xl hover:border-indigo-400 hover:bg-indigo-50/30 text-slate-350 hover:text-indigo-600 font-bold transition flex flex-col items-center justify-center gap-1 group/empty cursor-pointer"
+                                      >
+                                        <Plus className="h-4 w-4 transform group-hover/empty:scale-110 transition shrink-0" />
+                                        <span className="text-[10px] uppercase tracking-wider font-semibold">Réserver</span>
+                                      </button>
+                                    ) : (
+                                      <div className="w-full text-center py-6 border border-dotted border-slate-150 rounded-2xl text-slate-300 font-medium text-[10px] select-none">
+                                        Libre
+                                      </div>
+                                    )
+                                  )}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               )}
@@ -2200,22 +2594,81 @@ export default function App() {
                 />
               )}
             </>
-          ) : (
-            // ================= PROFESSOR ROLE VIEWS =================
-            <div className="space-y-6">
-              
-              {/* Profile selector tab banner and tutorial banner */}
-              <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-4">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                  <div className="space-y-1">
-                    <h2 className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
-                      <span className="p-2 rounded-xl bg-rose-50 text-rose-600 inline-block">👨‍🏫</span>
-                      <span>Portail Enseignant : Gestion des Plannings</span>
-                    </h2>
-                    <p className="text-xs text-slate-500">
-                      Consultez votre emploi du temps et déclarez vos vœux d'indisponibilité pour assurer le respect de vos contraintes horaires lors de la planification.
-                    </p>
-                  </div>
+
+            {/* PORTAL: Accountant Tab */}
+            {activeTab === "portal_accountant" && (
+              <AccountantTab 
+                teachers={teachers}
+                subjects={subjects}
+                courses={courses}
+                schoolName={schoolName}
+                academicYear={academicYear}
+              />
+            )}
+
+            {/* PORTAL: Supervisor Tab */}
+            {activeTab === "portal_supervisor" && (
+              <SupervisorTab 
+                classes={classes}
+                teachers={teachers}
+                rooms={rooms}
+                subjects={subjects}
+                courses={courses}
+                reportedAbsences={reportedAbsences}
+                onUpdateAbsences={handleUpdateAbsences}
+              />
+            )}
+
+            {/* PORTAL: Parent Tab */}
+            {activeTab === "portal_parent" && (
+              <ParentTab 
+                classes={classes}
+                teachers={teachers}
+                subjects={subjects}
+                rooms={rooms}
+                courses={courses}
+                schoolName={schoolName}
+                schoolSubName={schoolSubName}
+                academicYear={academicYear}
+                schoolPhone={schoolPhone}
+                schoolEmail={schoolEmail}
+                schoolAddress={schoolAddress}
+                schoolDirector={schoolDirector}
+                schoolMotto={schoolMotto}
+              />
+            )}
+
+            {/* PORTAL: Student Tab */}
+            {activeTab === "portal_student" && (
+              <StudentDashboard 
+                classes={classes}
+                teachers={teachers}
+                subjects={subjects}
+                rooms={rooms}
+                courses={courses}
+                reportedAbsences={reportedAbsences}
+                isScheduleValidated={isScheduleValidated}
+                schoolName={schoolName}
+                academicYear={academicYear}
+              />
+            )}
+
+            {/* PORTAL: Professor Tab (Vœux d'indisponibilité) */}
+            {activeTab === "portal_teacher" && (
+              <div className="space-y-6">
+                
+                {/* Profile selector tab banner and tutorial banner */}
+                <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-4">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <h2 className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
+                        <span className="p-2 rounded-xl bg-rose-50 text-rose-600 inline-block">👨‍🏫</span>
+                        <span>Portail Enseignant : Gestion des Plannings</span>
+                      </h2>
+                      <p className="text-xs text-slate-500">
+                        Consultez votre emploi du temps et déclarez vos vœux d'indisponibilité pour assurer le respect de vos contraintes horaires lors de la planification.
+                      </p>
+                    </div>
                   
                   <div className="flex items-center gap-2 shrink-0">
                     <span className="text-xs font-bold text-slate-400">Votre profil :</span>
@@ -2392,7 +2845,7 @@ export default function App() {
         </main>
 
         {/* Right slide-out panel for Gemini smart assistant AI drawer */}
-        {userRole === 'admin' && isAiDrawerOpen && (
+        {(userRole === 'super_admin' || userRole === 'director') && isAiDrawerOpen && (
           <aside 
             id="ai-assistant-drawer" 
             className="w-full md:w-[420px] bg-white border-t md:border-t-0 md:border-l border-slate-200 shadow-xl flex flex-col shrink-0 min-h-0 relative z-30 transition-all duration-300"
@@ -2539,35 +2992,17 @@ export default function App() {
                     />
                   </div>
 
-                  {/* Bouton : Générer pour UNE classe */}
                   <button
                     onClick={handleTriggerWizardGeneration}
-                    disabled={isWizardLoading || isGeneratingAll}
-                    className="cursor-pointer w-full text-center py-2 px-3 rounded-lg bg-purple-700 hover:bg-purple-600 text-white font-extrabold text-xs transition shadow-sm disabled:opacity-50 flex items-center justify-center gap-2"
+                    disabled={isWizardLoading}
+                    className="cursor-pointer w-full text-center py-2 px-3 rounded-lg bg-purple-750 hover:bg-purple-700 text-white font-extrabold text-xs transition shadow-sm disabled:opacity-50"
                   >
-                    <Sparkles className="h-3.5 w-3.5" />
-                    {isWizardLoading ? "Attribution en cours..." : "Générer pour cette classe"}
-                  </button>
-
-                  {/* Bouton : Générer pour TOUTES les classes */}
-                  <button
-                    onClick={handleGenerateAllClasses}
-                    disabled={isWizardLoading || isGeneratingAll}
-                    className="cursor-pointer w-full text-center py-2.5 px-3 rounded-lg bg-gradient-to-r from-indigo-700 to-purple-700 hover:from-indigo-600 hover:to-purple-600 text-white font-extrabold text-xs transition shadow-md disabled:opacity-50 flex items-center justify-center gap-2 border border-white/10"
-                  >
-                    <Sliders className="h-3.5 w-3.5" />
-                    {isGeneratingAll ? "Génération globale en cours..." : `⚡ Générer pour toutes les classes (${classes.length})`}
+                    {isWizardLoading ? "Attribution automatique..." : "Générer et positionner via l'IA !"}
                   </button>
 
                   {wizardLog && (
                     <div className="p-2 border border-purple-200 bg-white rounded-lg text-[10px] font-semibold text-purple-900 leading-normal max-h-[80px] overflow-y-auto">
                       {wizardLog}
-                    </div>
-                  )}
-
-                  {generateAllLog && (
-                    <div className="p-2 border border-indigo-200 bg-indigo-50 rounded-lg text-[10px] font-mono text-indigo-900 leading-relaxed max-h-[120px] overflow-y-auto whitespace-pre-line">
-                      {generateAllLog}
                     </div>
                   )}
                 </div>
@@ -2633,23 +3068,31 @@ export default function App() {
               {/* Class group code */}
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-slate-500">Groupe Classe</label>
-                <AutocompleteSelect
-                  options={classes.map(c => ({ value: c.id, label: c.name, sub: `${c.capacity} él.` }))}
+                <select
                   value={modalClassId}
-                  onChange={setModalClassId}
-                  placeholder="Sélectionnez un groupe"
-                />
+                  onChange={(e) => setModalClassId(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-250 hover:border-slate-350 rounded-xl text-xs font-semibold text-slate-800"
+                >
+                  <option value="">Sélectionnez un groupe</option>
+                  {classes.map(c => (
+                    <option key={c.id} value={c.id}>{c.name} ({c.capacity} él.)</option>
+                  ))}
+                </select>
               </div>
 
               {/* Subject course name */}
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-slate-500">Matière Enseignée</label>
-                <AutocompleteSelect
-                  options={subjects.map(s => ({ value: s.id, label: s.name }))}
+                <select
                   value={modalSubjectId}
-                  onChange={setModalSubjectId}
-                  placeholder="Sélectionnez une matière"
-                />
+                  onChange={(e) => setModalSubjectId(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-250 hover:border-slate-350 rounded-xl text-xs font-semibold text-slate-800"
+                >
+                  <option value="">Sélectionnez une matière</option>
+                  {subjects.map(s => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
               </div>
 
               {/* Teacher code */}
@@ -2658,31 +3101,31 @@ export default function App() {
                   <label className="font-semibold text-slate-500">Professeur en charge</label>
                   <span className="text-[10px] text-indigo-600 font-bold">Sélection qualifiée</span>
                 </div>
-                <AutocompleteSelect
-                  options={teachers.map(t => ({
-                    value: t.id,
-                    label: t.name,
-                    sub: t.subjects.map(x => subjects.find(s=>s.id===x)?.name || x).join(', ')
-                  }))}
+                <select
                   value={modalTeacherId}
-                  onChange={setModalTeacherId}
-                  placeholder="Sélectionnez l'enseignant"
-                />
+                  onChange={(e) => setModalTeacherId(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-250 hover:border-slate-350 rounded-xl text-xs font-semibold text-slate-800"
+                >
+                  <option value="">Sélectionnez l'enseignant</option>
+                  {teachers.map(t => (
+                    <option key={t.id} value={t.id}>{t.name} ({t.subjects.map(x => subjects.find(s=>s.id===x)?.name || x).join(', ')})</option>
+                  ))}
+                </select>
               </div>
 
               {/* Classroom location */}
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-slate-500">Salle de Classe réservée</label>
-                <AutocompleteSelect
-                  options={rooms.map(r => ({
-                    value: r.id,
-                    label: r.name,
-                    sub: `Cap: ${r.capacity} pl. (${r.type})`
-                  }))}
+                <select
                   value={modalRoomId}
-                  onChange={setModalRoomId}
-                  placeholder="Sélectionnez la salle"
-                />
+                  onChange={(e) => setModalRoomId(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-250 hover:border-slate-350 rounded-xl text-xs font-semibold text-slate-800"
+                >
+                  <option value="">Sélectionnez la salle</option>
+                  {rooms.map(r => (
+                    <option key={r.id} value={r.id}>{r.name} - Cap: {r.capacity} pl. ({r.type})</option>
+                  ))}
+                </select>
               </div>
 
               {/* Actions footer buttons */}

@@ -17,7 +17,7 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
   return (
     <div className={`flex items-center select-none ${className}`}>
       <svg
-        viewBox="0 0 420 110"
+        viewBox="0 0 560 110"
         className="h-full w-auto"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"

@@ -91,3 +91,13 @@ export interface ActivationCode {
   usedBy?: string;
 }
 
+export interface UserAccount {
+  id: string;
+  name: string;
+  email: string;
+  password?: string;
+  role: 'super_admin' | 'director' | 'accountant' | 'supervisor' | 'teacher' | 'parent' | 'student';
+  createdAt?: string;
+}
+
+

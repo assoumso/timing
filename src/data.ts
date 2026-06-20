@@ -1,4 +1,4 @@
-import { ClassItem, TeacherItem, SubjectItem, RoomItem, ScheduleCourse } from './types';
+import { ClassItem, TeacherItem, SubjectItem, RoomItem, ScheduleCourse, UserAccount } from './types';
 
 export const INITIAL_SUBJECTS: SubjectItem[] = [
   { id: 'math', name: 'Mathématiques', color: 'blue' },
@@ -324,3 +324,56 @@ export const COLOR_CLASSES: Record<string, { font: string, bg: string, border: s
     bgLight: 'bg-slate-50/40'
   }
 };
+
+export const INITIAL_ACCOUNTS: UserAccount[] = [
+  {
+    id: 'user_admin',
+    name: 'M. Touré (Administrateur)',
+    email: 'admin@school.com',
+    password: 'admin',
+    role: 'super_admin'
+  },
+  {
+    id: 'user_director',
+    name: 'Mme Catherine Amon (Directrice)',
+    email: 'director@school.com',
+    password: 'director',
+    role: 'director'
+  },
+  {
+    id: 'user_accountant',
+    name: 'M. Koffi (Comptable)',
+    email: 'comptable@school.com',
+    password: 'comptable',
+    role: 'accountant'
+  },
+  {
+    id: 'user_supervisor',
+    name: 'M. Diallo (Surveillant)',
+    email: 'surveillant@school.com',
+    password: 'surveillant',
+    role: 'supervisor'
+  },
+  {
+    id: 'user_teacher',
+    name: 'M. Martin (Enseignant)',
+    email: 'martin@school.com',
+    password: 'martin',
+    role: 'teacher'
+  },
+  {
+    id: 'user_parent',
+    name: 'M. Koné (Parent)',
+    email: 'parent@school.com',
+    password: 'parent',
+    role: 'parent'
+  },
+  {
+    id: 'user_student',
+    name: 'Awa Kouassi (Élève)',
+    email: 'eleve@school.com',
+    password: 'eleve',
+    role: 'student'
+  }
+];
+

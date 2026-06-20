@@ -1,6 +1,6 @@
 {
   "name": "Générateur d'Emploi du Temps",
-  "description": "Générateur d'emplois du temps scolaires complet pour écoles et enseignants, incluant un tableau de bord intuitif de gestion des conflits en temps réel et ordonnancement I.A. par Gemini.",
+  "description": "Plateforme complète de gestion d'établissement scolaire (School ERP) moderne, modulaire et professionnelle intégrant l'ordonnanceur intelligent de planification d'emplois du temps sans conflits.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

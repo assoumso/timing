@@ -41,6 +41,11 @@ interface DashboardTabProps {
   onGenerateNewCode: () => void;
   onDeleteActivationCode: (code: string) => void;
   schoolName?: string;
+  isEditable?: boolean;
+  isScheduleValidated?: boolean;
+  onToggleScheduleValidation?: () => void;
+  schoolDirector?: string;
+  academicYear?: string;
 }
 
 export default function DashboardTab({
@@ -61,7 +66,12 @@ export default function DashboardTab({
   activationCodes = [],
   onGenerateNewCode,
   onDeleteActivationCode,
-  schoolName = "ÉCOLE DES FAMILLES"
+  schoolName = "ÉCOLE DES FAMILLES",
+  isEditable = true,
+  isScheduleValidated = false,
+  onToggleScheduleValidation = () => {},
+  schoolDirector = "Le Directeur",
+  academicYear = "2025-2026"
 }: DashboardTabProps) {
   
   const [copiedSql, setCopiedSql] = useState(false);
@@ -130,20 +140,26 @@ GRANT ALL ON TABLE barakat_planning TO service_role;`;
             Bienvenue sur le tableau de bord d’administration. Suivez la charge d’enseignement, libérez les salles sur-occupées et organisez efficacement vos plannings.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2 shrink-0">
-          <button
-            onClick={onResetData}
-            className="cursor-pointer px-4 py-2.5 text-xs font-semibold bg-white/10 hover:bg-white/25 text-white border border-white/15 active:scale-95 transition rounded-xl"
-          >
-            Réinitialiser les données
-          </button>
-          <button
-            onClick={onClearAll}
-            className="cursor-pointer px-4 py-2.5 text-xs font-semibold bg-red-500/25 hover:bg-red-500/45 text-red-100 border border-red-500/30 active:scale-95 transition rounded-xl"
-          >
-            Vider le planning
-          </button>
-        </div>
+        {isEditable ? (
+          <div className="flex flex-wrap gap-2 shrink-0">
+            <button
+              onClick={onResetData}
+              className="cursor-pointer px-4 py-2.5 text-xs font-semibold bg-white/10 hover:bg-white/25 text-white border border-white/15 active:scale-95 transition rounded-xl"
+            >
+              Réinitialiser les données
+            </button>
+            <button
+              onClick={onClearAll}
+              className="cursor-pointer px-4 py-2.5 text-xs font-semibold bg-red-500/25 hover:bg-red-500/45 text-red-100 border border-red-500/30 active:scale-95 transition rounded-xl"
+            >
+              Vider le planning
+            </button>
+          </div>
+        ) : (
+          <div className="bg-[#ee7b11]/20 border border-[#f3aa1c]/40 text-[#f3aa1c] px-4 py-2 rounded-xl text-xs font-bold leading-none select-none flex items-center gap-1.5 shadow-sm">
+            <span>⚖️ Profil Consultation de Direction</span>
+          </div>
+        )}
       </div>
 
       {/* Supabase Integration Live Panel */}
@@ -176,18 +192,18 @@ GRANT ALL ON TABLE barakat_planning TO service_role;`;
           <div className="flex items-center gap-2 w-full md:w-auto self-stretch md:self-auto">
             <button
               onClick={onLoadFromSupabase}
-              disabled={isSyncing}
+              disabled={isSyncing || !isEditable}
               className="cursor-pointer flex-1 md:flex-none inline-flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs font-bold text-slate-700 hover:text-slate-950 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition disabled:opacity-50"
-              title="Restaurer la dernière version sauvegardée"
+              title={isEditable ? "Restaurer la dernière version sauvegardée" : "Action réservée au Super Admin"}
             >
               <DownloadCloud className="h-4 w-4 text-[#0b4998]" />
               <span>Restaurer / Charger</span>
             </button>
             <button
               onClick={() => onSaveToSupabase()}
-              disabled={isSyncing}
+              disabled={isSyncing || !isEditable}
               className="cursor-pointer flex-1 md:flex-none inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-[#0b4998] hover:bg-[#093d80] shadow-sm border border-[#f3aa1c]/30 rounded-xl transition disabled:opacity-50"
-              title="Créer un point de sauvegarde de l'état actuel"
+              title={isEditable ? "Créer un point de sauvegarde de l'état actuel" : "Action réservée au Super Admin"}
             >
               {isSyncing ? (
                 <RefreshCw className="h-4 w-4 animate-spin" />
@@ -493,76 +509,121 @@ GRANT ALL ON TABLE barakat_planning TO service_role;`;
             </p>
           </div>
 
-          {/* Section de gestion des clés d'activation */}
-          <div id="activation-key-panel" className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm">
-            <h3 className="text-sm font-bold text-slate-900 mb-2 flex items-center justify-between">
-              <span className="flex items-center gap-2">
-                <Key className="h-4.5 w-4.5 text-[#0b4998]" />
-                <span>Clés d'Activation Secrètes</span>
-              </span>
-              <button
-                onClick={onGenerateNewCode}
-                className="cursor-pointer px-2.5 py-1.5 bg-[#0b4998] hover:bg-[#093d80] text-white rounded-lg text-[10.5px] font-bold transition flex items-center gap-1 shadow-sm uppercase tracking-wider"
-              >
-                + Générer une clé
-              </button>
-            </h3>
-            
-            <p className="text-[10.5px] text-slate-400 mb-3 leading-relaxed">
-              Pour éviter les utilisations multiples, demandez aux nouveaux utilisateurs de saisir l'une des clés uniques ci-dessous à l'ouverture de leur lien.
-            </p>
+          {/* Section de gestion des clés d'activation ou Visa de Direction */}
+          {isEditable ? (
+            <div id="activation-key-panel" className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm">
+              <h3 className="text-sm font-bold text-slate-900 mb-2 flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <Key className="h-4.5 w-4.5 text-[#0b4998]" />
+                  <span>Clés d'Activation Secrètes</span>
+                </span>
+                <button
+                  onClick={onGenerateNewCode}
+                  className="cursor-pointer px-2.5 py-1.5 bg-[#0b4998] hover:bg-[#093d80] text-white rounded-lg text-[10.5px] font-bold transition flex items-center gap-1 shadow-sm uppercase tracking-wider"
+                >
+                  + Générer une clé
+                </button>
+              </h3>
+              
+              <p className="text-[10.5px] text-slate-400 mb-3 leading-relaxed">
+                Pour éviter les utilisations multiples, demandez aux nouveaux utilisateurs de saisir l'une des clés uniques ci-dessous à l'ouverture de leur lien.
+              </p>
 
-            <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-              {activationCodes.length === 0 ? (
-                <div className="text-center py-6 text-slate-400 border border-dashed border-slate-200 rounded-2xl text-xs font-semibold">
-                  Aucune clé générée. Utilisez le bouton ci-dessus pour en créer une.
-                </div>
-              ) : (
-                [...activationCodes].reverse().map((item, idx) => (
-                  <div key={idx} className="flex items-center justify-between p-2.5 bg-slate-50 border border-slate-150 rounded-xl hover:bg-slate-100/50 transition text-xs gap-2">
-                    <div className="flex flex-col min-w-0">
-                      <span className="font-mono text-[11px] font-black tracking-wider text-slate-900 select-all uppercase">
-                        {item.code}
-                      </span>
-                      {item.isUsed ? (
-                        <span className="text-[9px] text-slate-400 mt-0.5 truncate leading-none">
-                          Consommée le {new Date(item.usedAt || '').toLocaleDateString('fr-FR')} à {new Date(item.usedAt || '').toLocaleTimeString('fr-FR', {hour: '2-digit', minute:'2-digit'})}
-                        </span>
-                      ) : (
-                        <span className="text-[9px] text-[#0b4998] font-bold mt-0.5 leading-none uppercase tracking-wider">
-                          Prête à l'usage
-                        </span>
-                      )}
-                    </div>
-                    
-                    <div className="flex items-center gap-2 shrink-0">
-                      {item.isUsed ? (
-                        <span className="px-2 py-0.5 rounded-md bg-slate-200/60 border border-slate-300 text-slate-600 text-[8.5px] font-bold uppercase tracking-wider">
-                          Utilisée
-                        </span>
-                      ) : (
-                        <span className="px-1.5 py-0.5 rounded-md bg-emerald-100/70 border border-emerald-250 text-emerald-700 text-[8.5px] font-bold uppercase tracking-wider animate-pulse">
-                          Active
-                        </span>
-                      )}
-
-                      <button
-                        onClick={() => onDeleteActivationCode(item.code)}
-                        className="cursor-pointer p-1 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition"
-                        title="Supprimer la clé"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
+              <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                {activationCodes.length === 0 ? (
+                  <div className="text-center py-6 text-slate-400 border border-dashed border-slate-200 rounded-2xl text-xs font-semibold">
+                    Aucune clé générée. Utilisez le bouton ci-dessus pour en créer une.
                   </div>
-                ))
-              )}
+                ) : (
+                  [...activationCodes].reverse().map((item, idx) => (
+                    <div key={idx} className="flex items-center justify-between p-2.5 bg-slate-50 border border-slate-150 rounded-xl hover:bg-slate-100/50 transition text-xs gap-2">
+                      <div className="flex flex-col min-w-0">
+                        <span className="font-mono text-[11px] font-black tracking-wider text-slate-900 select-all uppercase">
+                          {item.code}
+                        </span>
+                        {item.isUsed ? (
+                          <span className="text-[9px] text-slate-400 mt-0.5 truncate leading-none">
+                            Consommée le {new Date(item.usedAt || '').toLocaleDateString('fr-FR')} à {new Date(item.usedAt || '').toLocaleTimeString('fr-FR', {hour: '2-digit', minute:'2-digit'})}
+                          </span>
+                        ) : (
+                          <span className="text-[9px] text-[#0b4998] font-bold mt-0.5 leading-none uppercase tracking-wider">
+                            Prête à l'usage
+                          </span>
+                        )}
+                      </div>
+                      
+                      <div className="flex items-center gap-2 shrink-0">
+                        {item.isUsed ? (
+                          <span className="px-2 py-0.5 rounded-md bg-slate-200/60 border border-slate-300 text-slate-600 text-[8.5px] font-bold uppercase tracking-wider">
+                            Utilisée
+                          </span>
+                        ) : (
+                          <span className="px-1.5 py-0.5 rounded-md bg-emerald-100/70 border border-emerald-250 text-emerald-700 text-[8.5px] font-bold uppercase tracking-wider animate-pulse">
+                            Active
+                          </span>
+                        )}
+
+                        <button
+                          onClick={() => onDeleteActivationCode(item.code)}
+                          className="cursor-pointer p-1 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition"
+                          title="Supprimer la clé"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+              
+              <div className="p-2.5 bg-amber-500/10 border border-amber-500/15 rounded-xl text-[10px] text-amber-700 font-semibold mt-3 leading-relaxed">
+                ⚠️ <strong>Clé Maître d'urgence :</strong> <code className="bg-white/60 px-1 rounded">BKT-ADMIN-789-MASTER</code> permet de débloquer n'importe quel terminal à tout moment.
+              </div>
             </div>
-            
-            <div className="p-2.5 bg-amber-500/10 border border-amber-500/15 rounded-xl text-[10px] text-amber-700 font-semibold mt-3 leading-relaxed">
-              ⚠️ <strong>Clé Maître d'urgence :</strong> <code className="bg-white/60 px-1 rounded">BKT-ADMIN-789-MASTER</code> permet de débloquer n'importe quel terminal à tout moment.
+          ) : (
+            <div id="director-visa-panel" className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-3.5">
+              <h3 className="text-sm font-bold text-slate-900 flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <Shield className="h-4.5 w-4.5 text-[#0b4998]" />
+                  <span>Visa Officiel de Direction</span>
+                </span>
+                <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wide border shadow-xs ${
+                  isScheduleValidated 
+                    ? 'bg-emerald-105 border-emerald-200 text-emerald-700 animate-pulse' 
+                    : 'bg-amber-100/80 border-[#f3aa1c]/30 text-amber-700'
+                }`}>
+                  {isScheduleValidated ? "✅ VALIDÉ ET LOCKÉ" : "⏳ REQUIS"}
+                </span>
+              </h3>
+              
+              <p className="text-[11px] text-slate-500 leading-relaxed font-semibold">
+                Donnez votre visa officiel pour certifier cet emploi du temps et le marquer comme validé dans l'établissement pour l'affichage publique et l'A4 officiel.
+              </p>
+
+              <div className="bg-slate-50 p-3 rounded-2xl border border-slate-150 text-xs space-y-1.5">
+                <div className="flex justify-between font-bold text-slate-700">
+                  <span>Signataire :</span>
+                  <span className="text-[#0b4998]">{schoolDirector}</span>
+                </div>
+                <div className="flex justify-between text-slate-500">
+                  <span>Année Académique :</span>
+                  <span>{academicYear}</span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={onToggleScheduleValidation}
+                className={`w-full cursor-pointer py-2.5 px-4 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 shadow-sm ${
+                  isScheduleValidated
+                    ? 'bg-rose-500 hover:bg-rose-600 text-white'
+                    : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                }`}
+              >
+                <span>{isScheduleValidated ? "Retirer mon Visa officiel" : "Autoriser & Apposer mon Visa"}</span>
+              </button>
             </div>
-          </div>
+          )}
 
           {/* Guidelines info */}
           <div className="bg-gradient-to-br from-[#0b4998] via-[#093d80] to-[#072c5e] rounded-3xl p-5 border border-[#f3aa1c]/30 shadow-sm text-white space-y-4">
