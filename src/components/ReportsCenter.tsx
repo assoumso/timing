@@ -29,7 +29,9 @@ type ReportType =
   | 'students_by_level' 
   | 'top_students' 
   | 'teachers_by_class' 
-  | 'teachers_by_gender';
+  | 'teachers_by_gender'
+  | 'teachers_all'
+  | 'students_all';
 
 export default function ReportsCenter({
   classes,
@@ -236,6 +238,36 @@ export default function ReportsCenter({
                 </div>
               </button>
 
+              <button
+                onClick={() => setActiveReport('teachers_all')}
+                className={`cursor-pointer px-4 py-3 rounded-xl text-xs font-extrabold text-left transition flex items-center gap-2.5 ${
+                  activeReport === 'teachers_all' 
+                    ? 'bg-indigo-50 text-indigo-900 border border-indigo-200' 
+                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
+                }`}
+              >
+                <Users className="h-4 w-4 text-emerald-600" />
+                <div className="leading-tight">
+                  <div className="block font-black">Liste générale des Enseignants</div>
+                  <span className="text-[10px] text-slate-400 font-medium">Tous les enseignants actifs</span>
+                </div>
+              </button>
+
+              <button
+                onClick={() => setActiveReport('students_all')}
+                className={`cursor-pointer px-4 py-3 rounded-xl text-xs font-extrabold text-left transition flex items-center gap-2.5 ${
+                  activeReport === 'students_all' 
+                    ? 'bg-indigo-50 text-indigo-900 border border-indigo-200' 
+                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
+                }`}
+              >
+                <GraduationCap className="h-4 w-4 text-[#ee7b11]" />
+                <div className="leading-tight">
+                  <div className="block font-black">Roster Général des Élèves</div>
+                  <span className="text-[10px] text-slate-400 font-medium">Inscrits & non inscrits / suspendus</span>
+                </div>
+              </button>
+
             </div>
           </div>
 
@@ -321,6 +353,8 @@ export default function ReportsCenter({
                 {activeReport === 'top_students' && `PALMARÈS DES MEILLEURS ÉLÈVES (TABLEAU D'HONNEUR)`}
                 {activeReport === 'teachers_by_class' && `AFFECTATION DES ENSEIGNANTS : CLASSE DE ${classes.find(c => c.id === selectedClassId)?.name || selectedClassId}`}
                 {activeReport === 'teachers_by_gender' && `RÉPARTITION ET ANALYSE DES ENSEIGNANTS PAR GENRE`}
+                {activeReport === 'teachers_all' && `LISTE GÉNÉRALE ET ANNUAIRE DE TOUS LES ENSEIGNANTS`}
+                {activeReport === 'students_all' && `ROSTER GÉNÉRAL DES ÉLÈVES (INSCRITS & NON-INSCRITS)`}
               </h3>
               <p className="text-[10px] text-slate-400 font-semibold italic mt-0.5">
                 Rapport officiel généré le {new Date().toLocaleDateString('fr-FR')} à {new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
@@ -667,6 +701,85 @@ export default function ReportsCenter({
                   </div>
                 );
               })()}
+
+              {/* 6. General Teachers List */}
+              {activeReport === 'teachers_all' && (
+                <table className="w-full border-collapse text-left text-xs">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-350">
+                      <th className="p-2 border border-slate-300 text-center font-bold w-10">N°</th>
+                      <th className="p-2 border border-slate-300 font-bold">Nom Complet</th>
+                      <th className="p-2 border border-slate-300 font-bold">Adresse E-mail</th>
+                      <th className="p-2 border border-slate-300 font-bold">Matière(s) de Spécialité</th>
+                      <th className="p-2 border border-slate-300 text-center font-bold w-36">Volume Horaire Total</th>
+                      <th className="p-2 border border-slate-300 text-center font-bold w-24">Statut</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {teachers.map((tch, idx) => {
+                      const subjectLabels = tch.subjects.map(sid => subjects.find(s => s.id === sid)?.name || sid);
+                      const totSlots = courses.filter(c => c.teacherId === tch.id).length;
+                      return (
+                        <tr key={tch.id} className="border-b border-slate-200">
+                          <td className="p-2 border border-slate-200 text-center font-bold text-slate-550">{idx + 1}</td>
+                          <td className="p-2 border border-slate-200 font-extrabold text-slate-800">{tch.name}</td>
+                          <td className="p-2 border border-slate-200 font-mono text-[10.5px] text-slate-600">{tch.email || 'Non renseignée'}</td>
+                          <td className="p-2 border border-slate-200 font-bold text-slate-500 uppercase text-[10px]">{subjectLabels.join(', ')}</td>
+                          <td className="p-2 border border-slate-200 text-center font-black text-indigo-900 bg-indigo-50/10">{totSlots * 2} heures / sem.</td>
+                          <td className="p-2 border border-slate-200 text-center text-emerald-700 font-bold">Actif</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+
+              {/* 7. Master Students List (Inscrits & Non Inscrits) */}
+              {activeReport === 'students_all' && (
+                <table className="w-full border-collapse text-left text-xs">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-350">
+                      <th className="p-2 border border-slate-300 text-center font-bold w-10">N°</th>
+                      <th className="p-2 border border-slate-300 font-bold w-24">Matricule</th>
+                      <th className="p-2 border border-slate-300 font-bold">Nom & Prénoms</th>
+                      <th className="p-2 border border-slate-300 font-bold">Classe</th>
+                      <th className="p-2 border border-slate-300 text-center font-bold w-12">Genre</th>
+                      <th className="p-2 border border-slate-300 font-bold">Tuteur / Contact</th>
+                      <th className="p-2 border border-slate-300 text-center font-bold w-32">Statut d'Inscription</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {students.map((std, idx) => {
+                      const isActive = std.status === 'Inscrit' || std.status === 'Réinscrit';
+                      return (
+                        <tr key={std.id} className="border-b border-slate-200">
+                          <td className="p-2 border border-slate-200 text-center font-bold text-slate-500">{idx + 1}</td>
+                          <td className="p-2 border border-slate-200 font-mono font-bold text-[#0b4998]">{std.matricule}</td>
+                          <td className="p-2 border border-slate-200 font-extrabold text-slate-800">{std.lastName} {std.firstName}</td>
+                          <td className="p-2 border border-slate-200 font-bold text-slate-600">
+                            {classes.find(c => c.id === std.classId)?.name || std.classId || 'Non affecté'}
+                          </td>
+                          <td className="p-2 border border-slate-200 text-center font-bold">{std.gender}</td>
+                          <td className="p-2 border border-slate-200 text-slate-550 font-medium">
+                            {std.tutorName} ({std.tutorPhone})
+                          </td>
+                          <td className="p-2 border border-slate-200 text-center">
+                            <span className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                              isActive 
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-250' 
+                                : std.status === 'Suspendu'
+                                ? 'bg-rose-100 text-rose-800 border border-rose-250'
+                                : 'bg-slate-100 text-slate-800 border border-slate-250'
+                            }`}>
+                              {std.status}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
 
             </div>
 
