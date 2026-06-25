@@ -11,7 +11,9 @@ import {
   Activity,
   Award,
   Sliders,
-  UserCheck
+  UserCheck,
+  Calendar,
+  AlertTriangle
 } from 'lucide-react';
 import { ClassItem } from '../types';
 
@@ -24,11 +26,18 @@ interface FinancialModuleProps {
   schoolDirector: string;
 }
 
+interface FeeInstallment {
+  label: string; // Ex: "1er Versement (Rentrée)"
+  amount: number;
+  dueDate: string;
+}
+
 interface TuitionFeeRate {
   classId: string;
   className: string;
-  amountNonAffecte: number; // Privatised fee (Non Affecté)
-  amountAffecte: number; // State subsidised parental fee (Affecté)
+  amountNonAffecte: number; // Private fee
+  amountAffecte: number; // State subsidised fee
+  installmentsNonAffecte: FeeInstallment[]; // Custom installments for private students
 }
 
 interface PaymentTransaction {
@@ -51,7 +60,7 @@ interface StudentRecord {
   classId: string;
   status: string;
   matricule: string;
-  assignmentStatus?: 'Affecté' | 'Non Affecté'; // State-sponsored (Affecté) vs Private (Non Affecté)
+  assignmentStatus?: 'Affecté' | 'Non Affecté';
 }
 
 export default function FinancialModule({
@@ -63,8 +72,11 @@ export default function FinancialModule({
   schoolDirector
 }: FinancialModuleProps) {
   
-  // Resolve student list dynamically
   const [studentList, setStudentList] = useState<StudentRecord[]>([]);
+  const [activeSubTab, setActiveSubTab] = useState<'billing' | 'txn_log' | 'fee_setup'>('billing');
+  
+  // Selection pointer for student accounting details
+  const [selectedStudentIdForDetail, setSelectedStudentIdForDetail] = useState<string>('std_1');
 
   useEffect(() => {
     loadStudents();
@@ -74,12 +86,14 @@ export default function FinancialModule({
     const saved = localStorage.getItem('erp_student_records');
     if (saved) {
       const parsed = JSON.parse(saved);
-      // Ensure all students have assignmentStatus field (defaulting to 'Non Affecté' if empty)
       const initialized = parsed.map((s: any) => ({
         ...s,
         assignmentStatus: s.assignmentStatus || 'Non Affecté'
       }));
       setStudentList(initialized);
+      if (initialized.length > 0) {
+        setSelectedStudentIdForDetail(initialized[0].id);
+      }
     } else {
       const defaults: StudentRecord[] = [
         { id: 'std_1', firstName: 'Koffi', lastName: 'Yao Anderson', gender: 'M', classId: '6A', status: 'Inscrit', matricule: 'M-2026-4102', assignmentStatus: 'Non Affecté' },
@@ -90,6 +104,7 @@ export default function FinancialModule({
       ];
       setStudentList(defaults);
       localStorage.setItem('erp_student_records', JSON.stringify(defaults));
+      setSelectedStudentIdForDetail('std_1');
     }
   };
 
@@ -104,15 +119,57 @@ export default function FinancialModule({
     localStorage.setItem('erp_student_records', JSON.stringify(updated));
   };
 
-  // Standard school fees rates per class
+  // Fees schedule rates per class
   const [feeSchedule, setFeeSchedule] = useState<TuitionFeeRate[]>(() => {
-    const saved = localStorage.getItem('erp_fees_schedule_v2');
+    const saved = localStorage.getItem('erp_fees_schedule_v3');
     if (saved) return JSON.parse(saved);
+    
+    // Default schedules with custom installments for private students
     return [
-      { classId: '6A', className: 'Sixième A', amountNonAffecte: 180000, amountAffecte: 15000 },
-      { classId: '6B', className: 'Sixième B', amountNonAffecte: 180000, amountAffecte: 15000 },
-      { classId: '3A', className: 'Troisième A', amountNonAffecte: 250000, amountAffecte: 25000 },
-      { classId: '3B', className: 'Troisième B', amountNonAffecte: 250000, amountAffecte: 25000 }
+      { 
+        classId: '6A', 
+        className: 'Sixième A', 
+        amountNonAffecte: 180000, 
+        amountAffecte: 15000,
+        installmentsNonAffecte: [
+          { label: 'Inscription / 1er Versement', amount: 80000, dueDate: '2026-09-15' },
+          { label: '2ème Versement', amount: 50000, dueDate: '2026-12-15' },
+          { label: '3ème Versement', amount: 50000, dueDate: '2027-03-15' }
+        ]
+      },
+      { 
+        classId: '6B', 
+        className: 'Sixième B', 
+        amountNonAffecte: 180000, 
+        amountAffecte: 15000,
+        installmentsNonAffecte: [
+          { label: 'Inscription / 1er Versement', amount: 80000, dueDate: '2026-09-15' },
+          { label: '2ème Versement', amount: 50000, dueDate: '2026-12-15' },
+          { label: '3ème Versement', amount: 50000, dueDate: '2027-03-15' }
+        ]
+      },
+      { 
+        classId: '3A', 
+        className: 'Troisième A', 
+        amountNonAffecte: 250000, 
+        amountAffecte: 25000,
+        installmentsNonAffecte: [
+          { label: 'Inscription / 1er Versement', amount: 100000, dueDate: '2026-09-15' },
+          { label: '2ème Versement', amount: 80000, dueDate: '2026-12-15' },
+          { label: '3ème Versement', amount: 70000, dueDate: '2027-03-15' }
+        ]
+      },
+      { 
+        classId: '3B', 
+        className: 'Troisième B', 
+        amountNonAffecte: 250000, 
+        amountAffecte: 25000,
+        installmentsNonAffecte: [
+          { label: 'Inscription / 1er Versement', amount: 100000, dueDate: '2026-09-15' },
+          { label: '2ème Versement', amount: 80000, dueDate: '2026-12-15' },
+          { label: '3ème Versement', amount: 70000, dueDate: '2027-03-15' }
+        ]
+      }
     ];
   });
 
@@ -120,7 +177,7 @@ export default function FinancialModule({
   const [studentDiscounts, setStudentDiscounts] = useState<Record<string, number>>(() => {
     const saved = localStorage.getItem('erp_student_discount_rates');
     return saved ? JSON.parse(saved) : {
-      'std_5': 50 // Gomez Marie-Chantal has 50% excellence scholarship
+      'std_5': 50
     };
   });
 
@@ -137,7 +194,7 @@ export default function FinancialModule({
 
   // Save changes
   useEffect(() => {
-    localStorage.setItem('erp_fees_schedule_v2', JSON.stringify(feeSchedule));
+    localStorage.setItem('erp_fees_schedule_v3', JSON.stringify(feeSchedule));
   }, [feeSchedule]);
 
   useEffect(() => {
@@ -148,9 +205,6 @@ export default function FinancialModule({
     localStorage.setItem('erp_billing_transactions', JSON.stringify(transactions));
   }, [transactions]);
 
-  // UI status controller
-  const [activeSubTab, setActiveSubTab] = useState<'billing' | 'txn_log' | 'fee_setup'>('billing');
-  
   // Selection pointer for receipts
   const [activeTxnId, setActiveTxnId] = useState('txn_1');
 
@@ -162,7 +216,7 @@ export default function FinancialModule({
     refNo: ''
   });
 
-  // Register collection payment method
+  // Register collection payment
   const handleRegisterPayment = (e: React.FormEvent) => {
     e.preventDefault();
     const student = studentList.find(s => s.id === payForm.studentId);
@@ -173,7 +227,7 @@ export default function FinancialModule({
 
     const payAmt = parseInt(String(payForm.amount));
     if (isNaN(payAmt) || payAmt <= 0) {
-      alert("Le montant à facturer doit s'élever au-delà de 0 FCFA !");
+      alert("Le montant doit s'élever au-delà de 0 FCFA !");
       return;
     }
 
@@ -216,15 +270,16 @@ export default function FinancialModule({
 
     const matchedFeeSchedule = feeSchedule.find(f => f.classId === classId);
     let baseFee = 200000;
+    let rawInstallments: FeeInstallment[] = [];
     
     if (matchedFeeSchedule) {
       baseFee = assignment === 'Affecté' ? matchedFeeSchedule.amountAffecte : matchedFeeSchedule.amountNonAffecte;
+      rawInstallments = matchedFeeSchedule.installmentsNonAffecte || [];
     } else {
-      // General fallbacks
       baseFee = assignment === 'Affecté' ? 20000 : 200000;
     }
     
-    // Check discount and scholarship
+    // Check discount
     const discountPercent = studentDiscounts[studentId] || 0;
     const finalInvoiceDue = Math.round(baseFee * (1 - discountPercent / 100));
 
@@ -233,6 +288,49 @@ export default function FinancialModule({
     const totalPaid = studentTxns.reduce((sum, t) => sum + t.amount, 0);
     const balanceRemaining = Math.max(0, finalInvoiceDue - totalPaid);
 
+    // Calculate details for each installment (only for private non-affecté students)
+    // Apply discount proportionally to each installment
+    const processedInstallments = rawInstallments.map((inst, index) => {
+      const discountedInstallmentAmt = Math.round(inst.amount * (1 - discountPercent / 100));
+      
+      // Calculate how much of this installment has been covered
+      // Determine cumulative targets up to this installment
+      let cumulativeTarget = 0;
+      for (let i = 0; i <= index; i++) {
+        cumulativeTarget += Math.round(rawInstallments[i].amount * (1 - discountPercent / 100));
+      }
+
+      const prevCumulativeTarget = cumulativeTarget - discountedInstallmentAmt;
+
+      let status: 'Payé' | 'Partiel' | 'En attente' | 'En retard' = 'En attente';
+      let paidForThisInst = 0;
+
+      if (totalPaid >= cumulativeTarget) {
+        status = 'Payé';
+        paidForThisInst = discountedInstallmentAmt;
+      } else if (totalPaid > prevCumulativeTarget) {
+        status = 'Partiel';
+        paidForThisInst = totalPaid - prevCumulativeTarget;
+      } else {
+        status = 'En attente';
+        paidForThisInst = 0;
+      }
+
+      // Check if past due date
+      const isPastDue = new Date(inst.dueDate).getTime() < new Date().getTime();
+      if (status !== 'Payé' && isPastDue) {
+        status = 'En retard';
+      }
+
+      return {
+        ...inst,
+        discountedAmount: discountedInstallmentAmt,
+        paidAmount: paidForThisInst,
+        remainingAmount: Math.max(0, discountedInstallmentAmt - paidForThisInst),
+        status
+      };
+    });
+
     return {
       baseFee,
       assignmentStatus: assignment,
@@ -240,7 +338,8 @@ export default function FinancialModule({
       finalInvoiceDue,
       totalPaid,
       balanceRemaining,
-      isFullyPaid: totalPaid >= finalInvoiceDue
+      isFullyPaid: totalPaid >= finalInvoiceDue,
+      installments: processedInstallments
     };
   };
 
@@ -249,8 +348,75 @@ export default function FinancialModule({
     ? getStudentBillingSheet(selectedTxnObj.studentId, selectedTxnObj.classId) 
     : null;
 
+  // Selected student for detail breakdown in left directory
+  const detailStudent = studentList.find(s => s.id === selectedStudentIdForDetail);
+  const detailStudentBilling = detailStudent 
+    ? getStudentBillingSheet(detailStudent.id, detailStudent.classId) 
+    : null;
+
   // Global collection stats
   const globalTotalCollected = transactions.reduce((sum, t) => sum + t.amount, 0);
+
+  // Helper to append / update custom installments for a class rate
+  const handleUpdateInstallment = (classId: string, index: number, field: keyof FeeInstallment, val: string | number) => {
+    const updatedSchedule = feeSchedule.map(rate => {
+      if (rate.classId === classId) {
+        const copyInst = [...rate.installmentsNonAffecte];
+        copyInst[index] = {
+          ...copyInst[index],
+          [field]: field === 'amount' ? Number(val) : val
+        };
+
+        // Recalculate total non-affecté amount to match sum of installments
+        const sumOfInstallments = copyInst.reduce((sum, inst) => sum + inst.amount, 0);
+
+        return {
+          ...rate,
+          installmentsNonAffecte: copyInst,
+          amountNonAffecte: sumOfInstallments
+        };
+      }
+      return rate;
+    });
+    setFeeSchedule(updatedSchedule);
+  };
+
+  const handleAddInstallmentRow = (classId: string) => {
+    const updatedSchedule = feeSchedule.map(rate => {
+      if (rate.classId === classId) {
+        const newInst: FeeInstallment = {
+          label: `Versement ${rate.installmentsNonAffecte.length + 1}`,
+          amount: 30000,
+          dueDate: new Date().toISOString().split('T')[0]
+        };
+        const updatedInsts = [...rate.installmentsNonAffecte, newInst];
+        const sum = updatedInsts.reduce((s, i) => s + i.amount, 0);
+        return {
+          ...rate,
+          installmentsNonAffecte: updatedInsts,
+          amountNonAffecte: sum
+        };
+      }
+      return rate;
+    });
+    setFeeSchedule(updatedSchedule);
+  };
+
+  const handleRemoveInstallmentRow = (classId: string, index: number) => {
+    const updatedSchedule = feeSchedule.map(rate => {
+      if (rate.classId === classId) {
+        const updatedInsts = rate.installmentsNonAffecte.filter((_, idx) => idx !== index);
+        const sum = updatedInsts.reduce((s, i) => s + i.amount, 0);
+        return {
+          ...rate,
+          installmentsNonAffecte: updatedInsts,
+          amountNonAffecte: sum
+        };
+      }
+      return rate;
+    });
+    setFeeSchedule(updatedSchedule);
+  };
 
   return (
     <div className="space-y-6">
@@ -263,7 +429,7 @@ export default function FinancialModule({
             <span>Gestion Financière & Recouvrement Scolarités</span>
           </h2>
           <p className="text-xs text-slate-500 font-medium">
-            Pilotez la caisse : configurez les tarifs d'écolage par niveau (élèves affectés par l'état vs élèves privés non affectés), appliquez les bourses d'études et délivrez des reçus officiels.
+            Pilotez la caisse : configurez les tarifs d'écolage par niveau (élèves affectés par l'état vs élèves privés non affectés), planifiez l'échéancier des versements et suivez les retards.
           </p>
         </div>
 
@@ -294,7 +460,7 @@ export default function FinancialModule({
             }`}
           >
             <Percent className="h-4 w-4" />
-            Grille des Écolages
+            Grille des Versements
           </button>
         </div>
       </div>
@@ -303,81 +469,153 @@ export default function FinancialModule({
       {activeSubTab === 'billing' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           
-          {/* Cashier Payment Form (Let cashier record money in) */}
-          <div className="lg:col-span-4 bg-white border border-slate-200 rounded-3xl p-5 shadow-xs space-y-4">
-            <h3 className="text-xs font-black uppercase text-[#0b4998] tracking-widest flex items-center gap-1.5">
-              <span>Encaissement Versement</span>
-            </h3>
+          {/* Cashier Payment Form & Installment Status Detail (5 cols) */}
+          <div className="lg:col-span-5 space-y-6">
+            
+            {/* Cashier entry */}
+            <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs space-y-4">
+              <h3 className="text-xs font-black uppercase text-[#0b4998] tracking-widest flex items-center gap-1.5">
+                <span>Encaissement Versement</span>
+              </h3>
 
-            <form onSubmit={handleRegisterPayment} className="space-y-3.5">
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-500 uppercase">Élève Payeur</label>
-                <select
-                  value={payForm.studentId}
-                  onChange={(e) => setPayForm(prev => ({ ...prev, studentId: e.target.value }))}
-                  className="w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none"
-                >
-                  {studentList.map(s => {
-                    const matchedClass = classes.find(c => c.id === s.classId)?.name || s.classId;
-                    const statusText = s.assignmentStatus === 'Affecté' ? 'Affecté État' : 'Privé';
-                    return (
-                      <option key={s.id} value={s.id}>{s.lastName} {s.firstName} ({matchedClass} - {statusText})</option>
-                    );
-                  })}
-                </select>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-500 uppercase">Montant Versé (FCFA)</label>
-                <input 
-                  type="number" 
-                  step="5000"
-                  required
-                  placeholder="ex: 15000"
-                  value={payForm.amount}
-                  onChange={(e) => setPayForm(prev => ({ ...prev, amount: parseInt(e.target.value) || 0 }))}
-                  className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black text-slate-800 focus:outline-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
+              <form onSubmit={handleRegisterPayment} className="space-y-3.5">
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase">Mode paiement</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Élève Payeur</label>
                   <select
-                    value={payForm.paymentMethod}
-                    onChange={(e) => setPayForm(prev => ({ ...prev, paymentMethod: e.target.value as any }))}
-                    className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none"
+                    value={payForm.studentId}
+                    onChange={(e) => setPayForm(prev => ({ ...prev, studentId: e.target.value }))}
+                    className="w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none"
                   >
-                    <option value="Cash (Caisse)">Cash (Caisse)</option>
-                    <option value="Wave Mobile">Wave Mobile</option>
-                    <option value="Orange Money">Orange Money</option>
-                    <option value="Virement Bancaire">Virement Bancaire</option>
+                    {studentList.map(s => {
+                      const matchedClass = classes.find(c => c.id === s.classId)?.name || s.classId;
+                      const statusText = s.assignmentStatus === 'Affecté' ? 'Affecté État' : 'Privé';
+                      return (
+                        <option key={s.id} value={s.id}>{s.lastName} {s.firstName} ({matchedClass} - {statusText})</option>
+                      );
+                    })}
                   </select>
                 </div>
+
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase">Réf. transaction</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Montant Versé (FCFA)</label>
                   <input 
-                    type="text" 
-                    placeholder="W-4981"
-                    value={payForm.refNo}
-                    onChange={(e) => setPayForm(prev => ({ ...prev, refNo: e.target.value }))}
-                    className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none"
+                    type="number" 
+                    step="5000"
+                    required
+                    placeholder="ex: 15000"
+                    value={payForm.amount}
+                    onChange={(e) => setPayForm(prev => ({ ...prev, amount: parseInt(e.target.value) || 0 }))}
+                    className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black text-slate-800 focus:outline-none"
                   />
                 </div>
-              </div>
 
-              <button 
-                type="submit"
-                className="cursor-pointer w-full py-2 bg-[#ee7b11] hover:bg-[#d66f0e] text-white font-extrabold text-xs rounded-xl flex items-center justify-center gap-1.5 transition pt-2"
-              >
-                <Banknote className="h-4 w-4" />
-                Valider l'Écrit de Caisse
-              </button>
-            </form>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">Mode paiement</label>
+                    <select
+                      value={payForm.paymentMethod}
+                      onChange={(e) => setPayForm(prev => ({ ...prev, paymentMethod: e.target.value as any }))}
+                      className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none"
+                    >
+                      <option value="Cash (Caisse)">Cash (Caisse)</option>
+                      <option value="Wave Mobile">Wave Mobile</option>
+                      <option value="Orange Money">Orange Money</option>
+                      <option value="Virement Bancaire">Virement Bancaire</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">Réf. transaction</label>
+                    <input 
+                      type="text" 
+                      placeholder="W-4981"
+                      value={payForm.refNo}
+                      onChange={(e) => setPayForm(prev => ({ ...prev, refNo: e.target.value }))}
+                      className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <button 
+                  type="submit"
+                  className="cursor-pointer w-full py-2 bg-[#ee7b11] hover:bg-[#d66f0e] text-white font-extrabold text-xs rounded-xl flex items-center justify-center gap-1.5 transition pt-2"
+                >
+                  <Banknote className="h-4 w-4" />
+                  Valider l'Écrit de Caisse
+                </button>
+              </form>
+            </div>
+
+            {/* Installment details for selected student */}
+            {detailStudent && detailStudentBilling && (
+              <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs space-y-4">
+                <div className="border-b border-slate-100 pb-2 flex justify-between items-center">
+                  <h4 className="text-xs font-black uppercase text-slate-750">
+                    Échéancier de Versements : {detailStudent.lastName} {detailStudent.firstName}
+                  </h4>
+                  <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
+                    detailStudent.assignmentStatus === 'Affecté' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-900 text-white'
+                  }`}>
+                    {detailStudent.assignmentStatus === 'Affecté' ? 'Affecté' : 'Élève Privé'}
+                  </span>
+                </div>
+
+                {detailStudent.assignmentStatus === 'Affecté' ? (
+                  <p className="text-xs text-slate-500 leading-normal italic bg-slate-50 p-3 rounded-xl border border-slate-200">
+                    Les élèves affectés par l'État bénéficient d'un tarif forfaitaire subventionné et ne sont pas soumis à l'échéancier des versements trimestriels privés.
+                  </p>
+                ) : detailStudentBilling.installments.length === 0 ? (
+                  <p className="text-xs text-slate-400 italic text-center py-4">Aucun versement planifié pour cette classe.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {detailStudentBilling.installments.map((inst, idx) => (
+                      <div key={idx} className="p-3 bg-slate-50 border border-slate-150 rounded-xl space-y-2">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span className="font-extrabold text-slate-800 text-xs block">{inst.label}</span>
+                            <span className="text-[10px] text-slate-450 font-bold block flex items-center gap-1">
+                              <Calendar className="h-3 w-3 text-slate-400" />
+                              Limite : {new Date(inst.dueDate).toLocaleDateString('fr-FR')}
+                            </span>
+                          </div>
+                          <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase ${
+                            inst.status === 'Payé' ? 'bg-emerald-100 text-emerald-800' :
+                            inst.status === 'Partiel' ? 'bg-amber-100 text-amber-800' :
+                            inst.status === 'En retard' ? 'bg-rose-105 text-rose-800 animate-pulse border border-rose-200' :
+                            'bg-slate-100 text-slate-500'
+                          }`}>
+                            {inst.status === 'Payé' ? 'Payé' :
+                             inst.status === 'Partiel' ? 'Partiel' :
+                             inst.status === 'En retard' ? 'En Retard ⚠️' :
+                             'En attente'}
+                          </span>
+                        </div>
+
+                        <div className="flex justify-between text-[11px] font-mono border-t border-slate-200/60 pt-1.5">
+                          <div>
+                            <span className="text-slate-400 font-bold">Attendu : </span>
+                            <strong className="text-slate-850 font-black">{inst.discountedAmount.toLocaleString()} FCFA</strong>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 font-bold">Payé : </span>
+                            <strong className="text-emerald-700 font-black">{inst.paidAmount.toLocaleString()} FCFA</strong>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 font-bold">Reste : </span>
+                            <strong className={inst.remainingAmount > 0 ? "text-rose-700 font-black" : "text-slate-700 font-black"}>
+                              {inst.remainingAmount.toLocaleString()} FCFA
+                            </strong>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
-          {/* Right student accounting directory */}
-          <div className="lg:col-span-8 bg-white border border-slate-200 rounded-3xl p-5 shadow-xs overflow-hidden space-y-4">
+          {/* Right student accounting directory (7 cols) */}
+          <div className="lg:col-span-7 bg-white border border-slate-200 rounded-3xl p-5 shadow-xs overflow-hidden space-y-4">
             <div className="flex justify-between items-center">
               <h3 className="text-sm font-black text-slate-905 uppercase tracking-tight">Dossier de Facturation Élèves ({studentList.length})</h3>
               <span className="text-[10.5px] bg-slate-900 text-white px-2.5 py-0.5 rounded-full font-bold">Total Encaissé : {globalTotalCollected.toLocaleString()} FCFA</span>
@@ -390,25 +628,32 @@ export default function FinancialModule({
                     <th className="p-2.5">Matricule</th>
                     <th className="p-2.5">Nom d'Élève</th>
                     <th className="p-2.5">Classe</th>
-                    <th className="p-2.5 w-32 text-center">Statut (État/Privé)</th>
-                    <th className="p-2.5 text-right">Scolarité Estimée</th>
-                    <th className="p-2.5 text-right text-emerald-800">Montant Versé</th>
-                    <th className="p-2.5 text-right text-red-750">Reste À payer</th>
-                    <th className="p-2.5 text-center">Statut</th>
+                    <th className="p-2.5 w-28 text-center">Type</th>
+                    <th className="p-2.5 text-right">Scolarité Dûe</th>
+                    <th className="p-2.5 text-right text-emerald-800">Payé</th>
+                    <th className="p-2.5 text-right text-red-750">Reste</th>
+                    <th className="p-2.5 text-center">Fiche</th>
                   </tr>
                 </thead>
                 <tbody>
                   {studentList.map(std => {
                     const bill = getStudentBillingSheet(std.id, std.classId);
+                    const isSelectedDetail = selectedStudentIdForDetail === std.id;
                     
                     return (
-                      <tr key={std.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition">
+                      <tr 
+                        key={std.id} 
+                        onClick={() => setSelectedStudentIdForDetail(std.id)}
+                        className={`border-b border-slate-100 hover:bg-slate-50/50 transition cursor-pointer ${
+                          isSelectedDetail ? 'bg-indigo-50/40' : ''
+                        }`}
+                      >
                         <td className="p-2.5 font-mono text-[#0b4998] font-bold">{std.matricule}</td>
                         <td className="p-2.5 font-extrabold text-slate-850 uppercase leading-none">
                           {std.lastName} {std.firstName}
                         </td>
                         <td className="p-2.5 font-bold text-slate-500">{std.classId}</td>
-                        <td className="p-2.5 text-center">
+                        <td className="p-2.5 text-center" onClick={(e) => e.stopPropagation()}>
                           <select
                             value={std.assignmentStatus || 'Non Affecté'}
                             onChange={(e) => updateStudentAssignmentStatus(std.id, e.target.value as any)}
@@ -418,28 +663,23 @@ export default function FinancialModule({
                                 : 'bg-slate-50 border-slate-200 text-slate-700'
                             }`}
                           >
-                            <option value="Non Affecté">Privé (Non affecté)</option>
+                            <option value="Non Affecté">Privé</option>
                             <option value="Affecté">État (Affecté)</option>
                           </select>
                         </td>
                         <td className="p-2.5 text-right font-semibold font-mono">
                           {bill.finalInvoiceDue.toLocaleString()} FCFA
-                          {bill.discountPercent > 0 && (
-                            <span className="text-[8px] bg-amber-100 text-amber-700 px-1 py-0.2 rounded font-extrabold uppercase block mt-0.5">
-                              Bourse -{bill.discountPercent}%
-                            </span>
-                          )}
                         </td>
                         <td className="p-2.5 text-right text-emerald-850 font-mono font-black">{bill.totalPaid.toLocaleString()} FCFA</td>
                         <td className="p-2.5 text-right text-red-750 font-mono font-black">{bill.balanceRemaining.toLocaleString()} FCFA</td>
                         <td className="p-2.5 text-center">
-                          {bill.balanceRemaining === 0 ? (
-                            <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full text-[9px] font-black uppercase">Soldé</span>
-                          ) : bill.totalPaid > 0 ? (
-                            <span className="px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full text-[9px] font-black uppercase">Partiel</span>
-                          ) : (
-                            <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-[9px] font-black uppercase">Impayé</span>
-                          )}
+                          <button 
+                            className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
+                              isSelectedDetail ? 'bg-[#0b4998] text-white' : 'bg-slate-100 text-slate-500'
+                            }`}
+                          >
+                            Détails
+                          </button>
                         </td>
                       </tr>
                     );
@@ -566,7 +806,7 @@ export default function FinancialModule({
                       <span>Montant Encaissé par ce reçu :</span>
                       <span>+{selectedTxnObj.amount.toLocaleString()} FCFA</span>
                     </div>
-                    <div className="flex justify-between text-slate-550 text-[10px]">
+                    <div className="flex justify-between text-slate-555 text-[10px]">
                       <span>Mode de règlement :</span>
                       <span>{selectedTxnObj.paymentMethod}</span>
                     </div>
@@ -609,58 +849,102 @@ export default function FinancialModule({
           
           {/* Tuition Fee Rates table */}
           <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs space-y-4">
-            <h3 className="text-sm font-black text-[#0b4998] uppercase">Barème Général des Frais d'Écolage</h3>
+            <h3 className="text-sm font-black text-[#0b4998] uppercase">Barème Général des Frais d'Écolage & Échéancier</h3>
             <p className="text-xs text-slate-500 font-medium">
-              Configurez le tarif de scolarité annuel applicable par défaut pour les élèves **non affectés (privés)** et les élèves **affectés (subventionnés par l'État)**.
+              Configurez le tarif de scolarité annuel applicable par défaut, le nombre de versements et la date limite pour chaque tranche des **élèves privés (non affectés)**.
             </p>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {feeSchedule.map((rate, index) => (
-                <div key={rate.classId} className="p-4 rounded-2xl bg-slate-50 border border-slate-150 space-y-3">
-                  <div className="flex justify-between items-center border-b border-slate-200 pb-1.5">
-                    <span className="text-[9px] bg-slate-900 text-white px-2 py-0.5 rounded font-black font-mono">CLASSE {rate.classId}</span>
-                    <span className="text-xs font-black text-slate-900">{rate.className}</span>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3 text-xs">
-                    {/* Private fees input */}
-                    <div className="space-y-1">
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase">Tarif Privé (Non affecté)</label>
-                      <div className="flex items-center gap-1">
-                        <input 
-                          type="number" 
-                          step="5000"
-                          value={rate.amountNonAffecte}
-                          onChange={(e) => {
-                            const copy = [...feeSchedule];
-                            copy[index].amountNonAffecte = parseInt(e.target.value) || 0;
-                            setFeeSchedule(copy);
-                          }}
-                          className="w-full text-center bg-white border border-slate-250 p-1.5 rounded-lg text-xs font-black text-slate-800 focus:outline-none"
-                        />
-                        <span className="text-[10px] font-bold text-slate-400">FCFA</span>
-                      </div>
+            <div className="space-y-6">
+              {feeSchedule.map((rate, rateIndex) => (
+                <div key={rate.classId} className="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-4">
+                  
+                  {/* Top line detail */}
+                  <div className="flex justify-between items-center border-b border-slate-200 pb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[9px] bg-slate-900 text-white px-2.5 py-0.5 rounded font-black font-mono">
+                        CLASSE {rate.classId}
+                      </span>
+                      <span className="text-xs font-black text-slate-900">{rate.className}</span>
                     </div>
-
-                    {/* State-sponsored fees input */}
-                    <div className="space-y-1">
-                      <label className="block text-[10px] font-bold text-[#0b4998] uppercase">Tarif État (Affecté)</label>
-                      <div className="flex items-center gap-1">
-                        <input 
-                          type="number" 
-                          step="1000"
-                          value={rate.amountAffecte}
-                          onChange={(e) => {
-                            const copy = [...feeSchedule];
-                            copy[index].amountAffecte = parseInt(e.target.value) || 0;
-                            setFeeSchedule(copy);
-                          }}
-                          className="w-full text-center bg-white border border-indigo-250 p-1.5 rounded-lg text-xs font-black text-slate-800 focus:outline-none"
-                        />
-                        <span className="text-[10px] font-bold text-slate-400 font-mono">FCFA</span>
-                      </div>
+                    
+                    {/* Subsidy fee input */}
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="text-[10px] font-bold text-[#0b4998] uppercase">Tarif État (Affecté) :</span>
+                      <input 
+                        type="number" 
+                        value={rate.amountAffecte}
+                        onChange={(e) => {
+                          const copy = [...feeSchedule];
+                          copy[rateIndex].amountAffecte = parseInt(e.target.value) || 0;
+                          setFeeSchedule(copy);
+                        }}
+                        className="w-20 text-center bg-white border border-slate-200 rounded px-1 py-0.5 font-bold"
+                      />
+                      <span className="text-[10px] font-bold text-slate-400">FCFA</span>
                     </div>
                   </div>
+
+                  {/* Installments configurator */}
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center text-xs font-bold text-slate-500">
+                      <span>Échéancier Élèves Privés (Somme : <strong className="text-[#ee7b11]">{rate.amountNonAffecte.toLocaleString()} FCFA</strong>)</span>
+                      <button 
+                        onClick={() => handleAddInstallmentRow(rate.classId)}
+                        className="cursor-pointer text-[10px] bg-slate-900 text-white px-2 py-0.5 rounded hover:bg-slate-800 transition flex items-center gap-1"
+                      >
+                        <Plus className="h-3 w-3" />
+                        Ajouter une Tranche
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      {rate.installmentsNonAffecte.map((inst, instIndex) => (
+                        <div key={instIndex} className="bg-white border border-slate-200 p-3 rounded-xl space-y-2 relative">
+                          <button
+                            onClick={() => handleRemoveInstallmentRow(rate.classId, instIndex)}
+                            className="absolute top-2 right-2 text-slate-300 hover:text-rose-600 transition"
+                            title="Supprimer cette tranche"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+
+                          <div className="space-y-1">
+                            <label className="block text-[8px] font-bold text-slate-400 uppercase">Libellé</label>
+                            <input 
+                              type="text" 
+                              value={inst.label} 
+                              onChange={(e) => handleUpdateInstallment(rate.classId, instIndex, 'label', e.target.value)}
+                              className="w-full border border-slate-200 rounded px-2 py-0.5 text-xs font-bold text-slate-800 focus:outline-none"
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="space-y-0.5">
+                              <label className="block text-[8px] font-bold text-slate-400 uppercase">Montant (FCFA)</label>
+                              <input 
+                                type="number" 
+                                step="1000"
+                                value={inst.amount} 
+                                onChange={(e) => handleUpdateInstallment(rate.classId, instIndex, 'amount', e.target.value)}
+                                className="w-full border border-slate-200 rounded px-1.5 py-0.5 text-xs font-black text-slate-805"
+                              />
+                            </div>
+                            <div className="space-y-0.5">
+                              <label className="block text-[8px] font-bold text-slate-400 uppercase">Échéance</label>
+                              <input 
+                                type="date" 
+                                value={inst.dueDate} 
+                                onChange={(e) => handleUpdateInstallment(rate.classId, instIndex, 'dueDate', e.target.value)}
+                                className="w-full border border-slate-200 rounded px-1 py-0.5 text-[10px]"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                  </div>
+
                 </div>
               ))}
             </div>
