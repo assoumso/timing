@@ -85,7 +85,7 @@ Instructions de mise en forme :
       });
 
       const response = await aiClient.models.generateContent({
-        model: 'gemini-3.5-flash',
+        model: 'gemini-2.5-flash',
         contents,
         config: {
           systemInstruction: systemInstruction,
@@ -150,7 +150,7 @@ Format attendu : le résultat doit être UNIQUEMENT un tableau d'objets JSON val
 `;
 
       const response = await aiClient.models.generateContent({
-        model: 'gemini-3.5-flash',
+        model: 'gemini-2.5-flash',
         contents: promptMsg,
         config: {
           responseMimeType: 'application/json',
