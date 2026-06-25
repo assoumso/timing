@@ -30,9 +30,16 @@
   select,
   input,
   #ai-assistant-drawer,
-  .fixed,
-  .absolute {
+  .fixed {
     display: none !important;
+  }
+
+  /* Prevent cutting off/truncating pages */
+  html, body, #root, .min-h-screen, .flex-1, .overflow-hidden, .overflow-y-auto {
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    display: block !important;
   }
 
   /* Standard print-only section */
@@ -78,5 +85,64 @@
     margin-top: 4px;
     padding: 6px !important;
     border-radius: 4px !important;
+  }
+
+  /* Compact layout for timetable cards inside cell during print */
+  .schedule-grid-table {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    table-layout: fixed !important;
+  }
+
+  .schedule-grid-table th {
+    padding: 3px 2px !important;
+    font-size: 9.5px !important;
+    background-color: #f1f5f9 !important;
+    font-weight: 800 !important;
+  }
+
+  .schedule-grid-table td {
+    padding: 2px 2px !important;
+    font-size: 9px !important;
+    height: auto !important;
+  }
+
+  .schedule-grid-table .group\/card,
+  .schedule-grid-table [class*="group/card"] {
+    padding: 2px 3px !important;
+    margin: 1px 0 !important;
+    border-radius: 4px !important;
+    font-size: 8px !important;
+    line-height: 1.1 !important;
+    box-shadow: none !important;
+  }
+
+  .schedule-grid-table .group\/card span,
+  .schedule-grid-table [class*="group/card"] span {
+    font-size: 8px !important;
+    font-weight: 800 !important;
+  }
+
+  .schedule-grid-table .group\/card div,
+  .schedule-grid-table [class*="group/card"] div {
+    font-size: 7.5px !important;
+    margin-top: 1px !important;
+  }
+
+  /* Enforce visibility of absolute divs within parent layout print cards */
+  .schedule-grid-table .absolute,
+  td .absolute {
+    display: flex !important;
+    flex-direction: column !important;
+    position: absolute !important;
+    inset: 2px !important;
+    padding: 2px 3px !important;
+  }
+
+  td.relative.h-16 {
+    height: 48px !important;
   }
 }

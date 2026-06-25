@@ -179,7 +179,7 @@ export const ParentTab: React.FC<ParentTabProps> = ({
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse border border-slate-150 min-w-400">
+            <table className="w-full border-collapse border border-slate-150 min-w-400 schedule-grid-table">
               <thead>
                 <tr className="bg-slate-50 text-[10px] uppercase font-bold text-slate-500 border-b border-slate-150 text-center">
                   <th className="p-2 border border-slate-150 text-left w-1/8 font-bold">Créneau</th>

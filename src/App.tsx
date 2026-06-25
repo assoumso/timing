@@ -2221,7 +2221,7 @@ export default function App() {
                         </div>
                       </div>
                     </div>
-                    <table className="w-full min-w-[700px] border-collapse">
+                    <table className="w-full min-w-[700px] border-collapse schedule-grid-table">
                       <thead>
                         <tr>
                           <th className="w-24 p-3 text-left text-xs font-bold text-slate-400 tracking-widest uppercase border-b border-slate-100">
@@ -3210,7 +3210,7 @@ export default function App() {
                   </div>
                 </div>
                 
-                <table className="w-full min-w-[700px] border-collapse">
+                <table className="w-full min-w-[700px] border-collapse schedule-grid-table">
                   <thead>
                     <tr>
                       <th className="w-24 p-3 text-left text-xs font-bold text-slate-400 tracking-widest uppercase border-b border-slate-100">
