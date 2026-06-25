@@ -3071,6 +3071,7 @@ export default function App() {
                   classes={classes}
                   schoolName={schoolName}
                   academicYear={academicYear}
+                  setAcademicYear={setAcademicYear}
                 />
               )}
 

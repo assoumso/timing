@@ -14,7 +14,11 @@ import {
   Key,
   Database,
   Grid,
-  Sparkles
+  Sparkles,
+  Calendar,
+  ArrowRight,
+  Archive,
+  GraduationCap
 } from 'lucide-react';
 
 interface ClassItem {
@@ -32,21 +36,34 @@ interface StudentRecord {
   classId: string;
   tutorName: string;
   tutorPhone: string;
-  status: 'Inscrit' | 'Réinscrit' | 'Suspendu';
+  status: 'Inscrit' | 'Réinscrit' | 'Redoublant' | 'Suspendu' | 'Diplômé';
   matricule: string;
   matriculeNat?: string;
   photo?: string;
   city?: string;
+  accessCode?: string;
+}
+
+interface StudentMark {
+  id: string;
+  studentId: string;
+  classId: string;
+  subjectId: string;
+  examName: string;
+  weight: number;
+  score: number;
+  recordedAt: string;
 }
 
 interface ToolsTabProps {
   classes: ClassItem[];
   schoolName: string;
   academicYear: string;
+  setAcademicYear: (year: string) => void;
 }
 
-export function ToolsTab({ classes, schoolName, academicYear }: ToolsTabProps) {
-  const [activeSubTab, setActiveSubTab] = useState<'individual_photo' | 'bulk_photo' | 'bulk_class_transfer' | 'system_db'>('individual_photo');
+export function ToolsTab({ classes, schoolName, academicYear, setAcademicYear }: ToolsTabProps) {
+  const [activeSubTab, setActiveSubTab] = useState<'individual_photo' | 'bulk_photo' | 'bulk_class_transfer' | 'year_transition' | 'system_db'>('individual_photo');
   
   // Student database loaded from localStorage
   const [students, setStudents] = useState<StudentRecord[]>([]);
@@ -79,7 +96,7 @@ export function ToolsTab({ classes, schoolName, academicYear }: ToolsTabProps) {
     setSaveStatus({ type, message });
     setTimeout(() => {
       setSaveStatus({ type: null, message: '' });
-    }, 4000);
+    }, 4500);
   };
 
   // ==========================================
@@ -219,7 +236,194 @@ export function ToolsTab({ classes, schoolName, academicYear }: ToolsTabProps) {
   };
 
   // ==========================================
-  // TAB 4: SYSTEM UTILITIES & DATABASE (JSON)
+  // TAB 4: ACADEMIC YEAR CLOSURE & INITIALIZATION
+  // ==========================================
+  
+  // Year setup states
+  const [newYearString, setNewYearString] = useState(() => {
+    const parts = academicYear.split('-');
+    if (parts.length === 2) {
+      const y1 = parseInt(parts[0]) + 1;
+      const y2 = parseInt(parts[1]) + 1;
+      return `${y1}-${y2}`;
+    }
+    return '2026-2027';
+  });
+
+  const [periodType, setPeriodType] = useState<'trimestre' | 'semestre'>('trimestre');
+  
+  // Period dates
+  const [p1Start, setP1Start] = useState('2026-09-15');
+  const [p1End, setP1End] = useState('2026-12-18');
+  const [p2Start, setP2Start] = useState('2027-01-05');
+  const [p2End, setP2End] = useState('2027-03-26');
+  const [p3Start, setP3Start] = useState('2027-04-12');
+  const [p3End, setP3End] = useState('2027-06-18');
+
+  // Promotion mappings: for each class, define what class students move to
+  const [promotionMapping, setPromotionMapping] = useState<Record<string, string>>(() => {
+    const mapping: Record<string, string> = {};
+    classes.forEach(c => {
+      // Auto-suggest logical next class
+      if (c.name.includes('6')) mapping[c.id] = classes.find(x => x.name.includes('5'))?.id || '';
+      else if (c.name.includes('5')) mapping[c.id] = classes.find(x => x.name.includes('4'))?.id || '';
+      else if (c.name.includes('4')) mapping[c.id] = classes.find(x => x.name.includes('3'))?.id || '';
+      else if (c.name.includes('3')) mapping[c.id] = 'DIPLOMA'; // Graduate
+      else mapping[c.id] = '';
+    });
+    return mapping;
+  });
+
+  const [promotionThreshold, setPromotionThreshold] = useState(10); // Minimum passing average (out of 20)
+  const [resetScheduleOnTransition, setResetScheduleOnTransition] = useState(true);
+  const [archiveLog, setArchiveLog] = useState<string[]>([]);
+  const [archivedYears, setArchivedYears] = useState<any[]>(() => {
+    const saved = localStorage.getItem('erp_archived_years');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const handleUpdateMapping = (classId: string, targetValue: string) => {
+    setPromotionMapping(prev => ({
+      ...prev,
+      [classId]: targetValue
+    }));
+  };
+
+  // Helper: calculate weighted average grade for a student
+  const getStudentAverage = (studentId: string): number | null => {
+    const savedMarks = localStorage.getItem('erp_student_marks');
+    if (!savedMarks) return null;
+    const marksList: StudentMark[] = JSON.parse(savedMarks);
+    const studentMarks = marksList.filter(m => m.studentId === studentId);
+    if (studentMarks.length === 0) return null;
+
+    let totalPoints = 0;
+    let totalWeights = 0;
+    studentMarks.forEach(m => {
+      totalPoints += m.score * m.weight;
+      totalWeights += m.weight;
+    });
+    return totalWeights > 0 ? totalPoints / totalWeights : null;
+  };
+
+  // Run Year Transition
+  const handleRunYearTransition = () => {
+    if (!newYearString.match(/^\d{4}-\d{4}$/)) {
+      showStatus('error', "Le format de la nouvelle année académique est incorrect. Exemple valide : 2026-2027");
+      return;
+    }
+
+    const log: string[] = [];
+    log.push(`🏁 Début du processus de clôture de l'année scolaire : ${academicYear}`);
+
+    // 1. Gather all current school files to archive
+    const currentStudents = [...students];
+    const currentMarks = (() => {
+      const saved = localStorage.getItem('erp_student_marks');
+      return saved ? JSON.parse(saved) : [];
+    })();
+    const currentCourses = (() => {
+      const saved = localStorage.getItem('timetable_courses');
+      return saved ? JSON.parse(saved) : [];
+    })();
+
+    const archiveItem = {
+      academicYear: academicYear,
+      archivedAt: new Date().toISOString(),
+      students: currentStudents,
+      marks: currentMarks,
+      courses: currentCourses,
+      schoolName: schoolName
+    };
+
+    // Save archive to list
+    const updatedArchives = [archiveItem, ...archivedYears];
+    localStorage.setItem('erp_archived_years', JSON.stringify(updatedArchives));
+    setArchivedYears(updatedArchives);
+    log.push(`💾 Sauvegarde de l'historique de l'année ${academicYear} effectuée.`);
+
+    // 2. Perform Automatic Student Promotions based on threshold and mapping
+    log.push(`🎓 Lancement de la promotion automatique avec un seuil de passage de ${promotionThreshold}/20.`);
+    
+    const promotedStudents = currentStudents.map(student => {
+      const average = getStudentAverage(student.id);
+      const hasPassed = average !== null ? average >= promotionThreshold : true; // assume pass if no grades recorded
+      
+      let nextClassId = student.classId;
+      let nextStatus = student.status;
+      let logMsg = '';
+
+      if (hasPassed) {
+        const mappedDest = promotionMapping[student.classId];
+        if (mappedDest === 'DIPLOMA') {
+          nextClassId = 'NONE';
+          nextStatus = 'Diplômé';
+          logMsg = `✔️ ${student.lastName} ${student.firstName} (Moy: ${average !== null ? average.toFixed(2) : 'N/A'}/20) -> Diplômé / Quitte l'école.`;
+        } else if (mappedDest) {
+          nextClassId = mappedDest;
+          nextStatus = 'Inscrit';
+          logMsg = `✔️ ${student.lastName} ${student.firstName} (Moy: ${average !== null ? average.toFixed(2) : 'N/A'}/20) -> Promu en classe ${classes.find(c => c.id === mappedDest)?.name || mappedDest}.`;
+        } else {
+          nextStatus = 'Réinscrit';
+          logMsg = `✔️ ${student.lastName} ${student.firstName} (Moy: ${average !== null ? average.toFixed(2) : 'N/A'}/20) -> Reste en classe ${classes.find(c => c.id === student.classId)?.name || student.classId} (Réaffectation manuelle requise).`;
+        }
+      } else {
+        nextStatus = 'Redoublant';
+        logMsg = `❌ ${student.lastName} ${student.firstName} (Moy: ${average !== null ? average.toFixed(2) : 'N/A'}/20) -> Redouble en classe ${classes.find(c => c.id === student.classId)?.name || student.classId}.`;
+      }
+
+      log.push(logMsg);
+      
+      // Update matricule for the new year
+      const newMatricule = 'M-' + newYearString.split('-')[0] + '-' + student.matricule.split('-')[2];
+
+      return {
+        ...student,
+        classId: nextClassId,
+        status: nextStatus as any,
+        matricule: newMatricule
+      };
+    });
+
+    // Save promoted students to local state and storage
+    setStudents(promotedStudents);
+    localStorage.setItem('erp_student_records', JSON.stringify(promotedStudents));
+
+    // 3. Clear current marks & courses for the new year if checked
+    localStorage.setItem('erp_student_marks', JSON.stringify([]));
+    log.push(`🧹 Registre des notes scolaires vidé pour la nouvelle année.`);
+
+    if (resetScheduleOnTransition) {
+      localStorage.setItem('timetable_courses', JSON.stringify([]));
+      log.push(`📅 Grille de l'emploi du temps réinitialisée pour accueillir le nouveau planning.`);
+    }
+
+    // 4. Save Period Configuration for the new year
+    const periodConfig = {
+      type: periodType,
+      periods: periodType === 'trimestre' ? [
+        { name: 'Trimestre 1', start: p1Start, end: p1End },
+        { name: 'Trimestre 2', start: p2Start, end: p2End },
+        { name: 'Trimestre 3', start: p3Start, end: p3End }
+      ] : [
+        { name: 'Semestre 1', start: p1Start, end: p1End },
+        { name: 'Semestre 2', start: p2Start, end: p2End }
+      ]
+    };
+    localStorage.setItem('erp_academic_year_config', JSON.stringify(periodConfig));
+    log.push(`📅 Découpage de l'année scolaire défini en : ${periodType.toUpperCase()}S.`);
+
+    // 5. Update global Academic Year String
+    setAcademicYear(newYearString);
+    localStorage.setItem('barakat_academic_year', newYearString);
+    log.push(`🚀 Nouvelle année académique ${newYearString} démarrée avec succès !`);
+
+    setArchiveLog(log);
+    showStatus('success', `La transition vers la nouvelle année scolaire ${newYearString} s'est terminée avec succès.`);
+  };
+
+  // ==========================================
+  // TAB 5: SYSTEM UTILITIES & DATABASE (JSON)
   // ==========================================
   const handleExportData = () => {
     const backup: Record<string, string | null> = {};
@@ -232,7 +436,10 @@ export function ToolsTab({ classes, schoolName, academicYear }: ToolsTabProps) {
       'timetable_subjects',
       'timetable_courses',
       'timetable_absences',
-      'erp_school_settings'
+      'erp_school_settings',
+      'erp_academic_year_config',
+      'erp_archived_years',
+      'barakat_academic_year'
     ];
 
     keysToBackup.forEach(k => {
@@ -292,8 +499,7 @@ export function ToolsTab({ classes, schoolName, academicYear }: ToolsTabProps) {
     }
     const studentsList = JSON.parse(saved);
     const updated = studentsList.map((s: any) => {
-      // If code parent/student doesn't exist, create random 6 digit numeric code
-      const accessCode = s.accessCode || Math.floor(100000 + Math.random() * 90000).toString();
+      const accessCode = s.accessCode || Math.floor(100000 + Math.random() * 900000).toString();
       return { ...s, accessCode };
     });
     localStorage.setItem('erp_student_records', JSON.stringify(updated));
@@ -306,7 +512,7 @@ export function ToolsTab({ classes, schoolName, academicYear }: ToolsTabProps) {
       
       {/* Upper Status Banner */}
       {saveStatus.type && (
-        <div className={`p-4 rounded-2xl flex items-center gap-3 border shadow-sm transition animate-bounce ${
+        <div className={`p-4 rounded-2xl flex items-center gap-3 border shadow-sm transition ${
           saveStatus.type === 'success' ? 'bg-emerald-50 text-emerald-800 border-emerald-250' : 'bg-rose-50 text-rose-800 border-rose-250'
         }`}>
           <span className="text-xl">{saveStatus.type === 'success' ? '✓' : '⚠️'}</span>
@@ -324,7 +530,7 @@ export function ToolsTab({ classes, schoolName, academicYear }: ToolsTabProps) {
             Menu Administratif & Utilitaires
           </h1>
           <p className="text-xs text-slate-350 max-w-xl font-medium">
-            Affectez des photos aux dossiers d'élèves, organisez les passages en masse de classes, ou gérez les sauvegardes de votre base locale.
+            Affectez des photos aux dossiers d'élèves, organisez les passages en masse de classes, clôturez vos trimestres ou préparez le démarrage de la nouvelle année.
           </p>
         </div>
         <div className="text-right shrink-0">
@@ -370,6 +576,18 @@ export function ToolsTab({ classes, schoolName, academicYear }: ToolsTabProps) {
         >
           <FolderSync className="h-4 w-4" />
           <span>Réaffectation / Transfert de Classe</span>
+        </button>
+
+        <button
+          onClick={() => setActiveSubTab('year_transition')}
+          className={`cursor-pointer px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 border ${
+            activeSubTab === 'year_transition' 
+              ? 'bg-slate-900 text-white border-slate-950 shadow-xs' 
+              : 'bg-white text-slate-650 hover:bg-slate-50 border-slate-250'
+          }`}
+        >
+          <Archive className="h-4 w-4 text-[#ee7b11]" />
+          <span>Clôture & Nouvelle Année</span>
         </button>
 
         <button
@@ -718,7 +936,7 @@ export function ToolsTab({ classes, schoolName, academicYear }: ToolsTabProps) {
                   <div className="bg-white p-3 border border-slate-200 rounded-xl text-center space-y-1">
                     <span className="text-slate-400 text-[10px] font-bold block uppercase">Élèves sélectionnés</span>
                     <strong className="text-2xl font-black text-indigo-700">{selectedStudentIds.length}</strong>
-                    <span className="text-[10px] text-slate-500 block">sur {sourceStudents.length} disponibles</span>
+                    <span className="text-[10px] text-slate-550 block">sur {sourceStudents.length} disponibles</span>
                   </div>
 
                   <div className="space-y-1">
@@ -753,7 +971,251 @@ export function ToolsTab({ classes, schoolName, academicYear }: ToolsTabProps) {
           </div>
         )}
 
-        {/* TAB 4: SYSTEM UTILITIES */}
+        {/* TAB 4: YEAR TRANSITION (CLÔTURE & NOUVELLE ANNÉE) */}
+        {activeSubTab === 'year_transition' && (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            
+            {/* Form Setup Controls (7 cols) */}
+            <div className="lg:col-span-7 bg-white border border-slate-200 rounded-3xl p-5 md:p-6 shadow-sm space-y-6">
+              
+              <div className="space-y-1 pb-3 border-b border-slate-100">
+                <h2 className="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                  <Archive className="h-4.5 w-4.5 text-[#ee7b11]" />
+                  <span>Clôture et Transition Académique</span>
+                </h2>
+                <p className="text-[10.5px] text-slate-450">Définissez la nouvelle année, paramétrez les périodes (trimestres/semestres) et lancez les promotions d'élèves.</p>
+              </div>
+
+              {/* Step 1: New Year String and Division */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase">Nouvelle Année Scolaire</label>
+                  <input 
+                    type="text" 
+                    placeholder="Ex: 2026-2027"
+                    value={newYearString}
+                    onChange={(e) => setNewYearString(e.target.value)}
+                    className="w-full h-10 px-3 rounded-xl border border-slate-250 text-xs font-extrabold focus:outline-none"
+                  />
+                  <span className="text-[9px] text-slate-400 block mt-0.5">Format obligatoire : AAAA-AAAA</span>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase">Découpage de l'Année</label>
+                  <select 
+                    value={periodType}
+                    onChange={(e) => setPeriodType(e.target.value as any)}
+                    className="w-full h-10 px-3 rounded-xl border border-slate-250 text-xs font-bold focus:outline-none cursor-pointer"
+                  >
+                    <option value="trimestre">Trimestres (3 périodes scolaires)</option>
+                    <option value="semestre">Semestres (2 périodes scolaires)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Step 2: Date configuration based on division selection */}
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-3">
+                <span className="text-[10px] font-black uppercase text-slate-450 tracking-wider">Planification Calendaire des Périodes</span>
+                
+                {periodType === 'trimestre' ? (
+                  <div className="space-y-3">
+                    {/* T1 */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <label className="block text-[9px] text-slate-400 font-bold uppercase mb-1">Trimestre 1 — Début</label>
+                        <input type="date" value={p1Start} onChange={(e) => setP1Start(e.target.value)} className="w-full h-8 px-2 border border-slate-200 rounded-lg bg-white" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] text-slate-400 font-bold uppercase mb-1">Trimestre 1 — Fin</label>
+                        <input type="date" value={p1End} onChange={(e) => setP1End(e.target.value)} className="w-full h-8 px-2 border border-slate-200 rounded-lg bg-white" />
+                      </div>
+                    </div>
+                    {/* T2 */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <label className="block text-[9px] text-slate-400 font-bold uppercase mb-1">Trimestre 2 — Début</label>
+                        <input type="date" value={p2Start} onChange={(e) => setP2Start(e.target.value)} className="w-full h-8 px-2 border border-slate-200 rounded-lg bg-white" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] text-slate-400 font-bold uppercase mb-1">Trimestre 2 — Fin</label>
+                        <input type="date" value={p2End} onChange={(e) => setP2End(e.target.value)} className="w-full h-8 px-2 border border-slate-200 rounded-lg bg-white" />
+                      </div>
+                    </div>
+                    {/* T3 */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <label className="block text-[9px] text-slate-400 font-bold uppercase mb-1">Trimestre 3 — Début</label>
+                        <input type="date" value={p3Start} onChange={(e) => setP3Start(e.target.value)} className="w-full h-8 px-2 border border-slate-200 rounded-lg bg-white" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] text-slate-400 font-bold uppercase mb-1">Trimestre 3 — Fin</label>
+                        <input type="date" value={p3End} onChange={(e) => setP3End(e.target.value)} className="w-full h-8 px-2 border border-slate-200 rounded-lg bg-white" />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {/* S1 */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <label className="block text-[9px] text-slate-400 font-bold uppercase mb-1">Semestre 1 — Début</label>
+                        <input type="date" value={p1Start} onChange={(e) => setP1Start(e.target.value)} className="w-full h-8 px-2 border border-slate-200 rounded-lg bg-white" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] text-slate-400 font-bold uppercase mb-1">Semestre 1 — Fin</label>
+                        <input type="date" value={p1End} onChange={(e) => setP1End(e.target.value)} className="w-full h-8 px-2 border border-slate-200 rounded-lg bg-white" />
+                      </div>
+                    </div>
+                    {/* S2 */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <label className="block text-[9px] text-slate-400 font-bold uppercase mb-1">Semestre 2 — Début</label>
+                        <input type="date" value={p2Start} onChange={(e) => setP2Start(e.target.value)} className="w-full h-8 px-2 border border-slate-200 rounded-lg bg-white" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] text-slate-400 font-bold uppercase mb-1">Semestre 2 — Fin</label>
+                        <input type="date" value={p2End} onChange={(e) => setP2End(e.target.value)} className="w-full h-8 px-2 border border-slate-200 rounded-lg bg-white" />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Step 3: Promotion rules mapping */}
+              <div className="space-y-3">
+                <span className="text-[10px] font-black uppercase text-slate-450 tracking-wider block">Règles de passage & Promotion des élèves</span>
+                
+                <div className="p-3 bg-indigo-50/50 border border-indigo-100 rounded-xl flex items-center justify-between text-xs gap-4">
+                  <div className="space-y-0.5">
+                    <span className="font-extrabold text-slate-800 block">Seuil de passage annuel</span>
+                    <p className="text-[10px] text-slate-500 leading-normal">Moyenne annuelle pondérée minimale requise pour valider l'année et passer en classe supérieure.</p>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <input 
+                      type="number" 
+                      min="0" 
+                      max="20" 
+                      step="0.5"
+                      value={promotionThreshold} 
+                      onChange={(e) => setPromotionThreshold(parseFloat(e.target.value))}
+                      className="w-16 h-8 text-center border border-indigo-200 bg-white rounded-lg font-bold focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                    />
+                    <span className="font-bold text-slate-600">/ 20</span>
+                  </div>
+                </div>
+
+                {/* Class Mapping Matrix */}
+                <div className="space-y-2">
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase">Correspondance des classes de passage</label>
+                  <div className="border border-slate-200 rounded-2xl overflow-hidden max-h-56 overflow-y-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200 text-slate-550 font-bold">
+                          <th className="p-2.5">Classe Actuelle</th>
+                          <th className="p-2.5 text-center"></th>
+                          <th className="p-2.5">Classe Supérieure / Passage</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {classes.map(c => (
+                          <tr key={c.id} className="border-b border-slate-100 hover:bg-slate-50/20">
+                            <td className="p-2.5 font-bold text-slate-700">{c.name}</td>
+                            <td className="p-2.5 text-center text-slate-400">➔</td>
+                            <td className="p-2.5">
+                              <select
+                                value={promotionMapping[c.id] || ''}
+                                onChange={(e) => handleUpdateMapping(c.id, e.target.value)}
+                                className="w-full h-8 px-2 border border-slate-200 rounded-lg text-xs focus:outline-none"
+                              >
+                                <option value="">Choisir la destination...</option>
+                                <option value="DIPLOMA">🎓 Diplômé / Quitte l'école</option>
+                                {classes.filter(x => x.id !== c.id).map(x => (
+                                  <option key={x.id} value={x.id}>{x.name}</option>
+                                ))}
+                              </select>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              {/* Reset schedule options */}
+              <div className="flex items-center gap-2.5 py-1 text-xs">
+                <input 
+                  type="checkbox"
+                  id="reset_schedule_transition"
+                  checked={resetScheduleOnTransition}
+                  onChange={(e) => setResetScheduleOnTransition(e.target.checked)}
+                  className="h-4 w-4 rounded border-slate-350 text-[#0b4998] focus:ring-[#0b4998]"
+                />
+                <label htmlFor="reset_schedule_transition" className="font-bold text-slate-650 cursor-pointer">
+                  Réinitialiser la grille d'emploi du temps pour la nouvelle année
+                </label>
+              </div>
+
+              {/* Action Button */}
+              <button
+                onClick={handleRunYearTransition}
+                className="cursor-pointer h-12 w-full bg-[#ee7b11] hover:bg-[#d9700f] text-white text-xs font-black uppercase tracking-wider rounded-xl transition shadow-md flex items-center justify-center gap-2 active:scale-[0.98]"
+              >
+                <RefreshCw className="h-4 w-4 animate-spin-slow" />
+                <span>Clôturer et Initialiser l'Année {newYearString}</span>
+              </button>
+
+            </div>
+
+            {/* Archive and execution logs (5 cols) */}
+            <div className="lg:col-span-5 space-y-6">
+              
+              {/* Live console logging */}
+              {archiveLog.length > 0 && (
+                <div className="bg-slate-900 text-emerald-400 font-mono text-[10px] rounded-3xl p-5 shadow-inner border border-slate-950 space-y-1.5 max-h-80 overflow-y-auto">
+                  <span className="text-slate-400 block border-b border-slate-800 pb-2 mb-2 uppercase font-black tracking-wider text-center">Rapport d'exécution</span>
+                  {archiveLog.map((line, idx) => (
+                    <div key={idx} className="leading-relaxed">
+                      {line}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Historical archived years summary */}
+              <div className="bg-white border border-slate-200 rounded-3xl p-5 md:p-6 shadow-sm space-y-4">
+                <h3 className="text-xs font-black uppercase text-slate-700 tracking-wider flex items-center gap-1.5 border-b border-slate-100 pb-2">
+                  <Archive className="h-4.5 w-4.5 text-[#0b4998]" />
+                  <span>Historique des années clôturées</span>
+                </h3>
+
+                {archivedYears.length === 0 ? (
+                  <p className="text-xs text-slate-400 italic text-center py-4">
+                    Aucune archive historique d'année scolaire enregistrée.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {archivedYears.map((arc, idx) => (
+                      <div key={idx} className="p-3 border border-slate-100 bg-[#dfecf8]/10 rounded-xl space-y-1.5 text-xs">
+                        <div className="flex justify-between items-center font-bold">
+                          <span className="text-[#0b4998] font-black">Année : {arc.academicYear}</span>
+                          <span className="text-[9.5px] text-slate-400">{new Date(arc.archivedAt).toLocaleDateString('fr-FR')}</span>
+                        </div>
+                        <div className="text-[10px] text-slate-500">
+                          <span>Effectif sauvegardé : <strong>{arc.students?.length || 0} élèves</strong></span> • <span>Notes archivées : <strong>{arc.marks?.length || 0} entrées</strong></span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+            </div>
+
+          </div>
+        )}
+
+        {/* TAB 5: SYSTEM UTILITIES */}
         {activeSubTab === 'system_db' && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
             
