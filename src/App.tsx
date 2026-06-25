@@ -43,8 +43,10 @@ import AttendanceModule from './components/AttendanceModule';
 import FinancialModule from './components/FinancialModule';
 import PeripheralErpModules from './components/PeripheralErpModules';
 import ReportsCenter from './components/ReportsCenter';
+import { ToolsTab } from './components/ToolsTab';
 import { 
   Calendar, 
+  Wrench,
   LayoutDashboard, 
   Users, 
   School, 
@@ -1655,6 +1657,13 @@ export default function App() {
               ]
             },
             {
+              id: "tools",
+              label: "🛠️ Outils",
+              items: [
+                { id: "tools_panel", name: "Paramètres & Outils Scolaires", icon: <Wrench className="h-4 w-4 text-amber-500" />, desc: "Affectations, photos et utilitaires" }
+              ]
+            },
+            {
               id: "schedule",
               label: "📅 Emplois du Temps (EDT)",
               items: [
@@ -3052,6 +3061,15 @@ export default function App() {
                   schoolName={schoolName}
                   schoolSubName={schoolSubName}
                   schoolMotto={schoolMotto}
+                  academicYear={academicYear}
+                />
+              )}
+
+              {/* TAB: Tools Panel */}
+              {activeTab === 'tools_panel' && (
+                <ToolsTab
+                  classes={classes}
+                  schoolName={schoolName}
                   academicYear={academicYear}
                 />
               )}
