@@ -55,6 +55,117 @@ export default function TeacherErpModule({
     localStorage.setItem('erp_teachers_extended', JSON.stringify(data));
   };
 
+  const exportTeachers = (format: 'excel' | 'pdf' | 'word') => {
+    const schoolName = localStorage.getItem('barakat_school_name') || "ÉCOLE DES FAMILLES";
+    const academicYear = localStorage.getItem('barakat_academic_year') || "2025-2026";
+    const title = "Liste des Enseignants - " + schoolName;
+    const headers = ["Identifiant", "Nom Complet", "Matières enseignées", "Type de Contrat", "Traitement Mensuel", "Heures Planifiées", "Max Heures/Semaine", "Adresse Email", "Téléphone"];
+    
+    const rows = teachers.map(t => {
+      const ext = extendedData[t.id] || { phone: '', contractType: 'Permanent (CDI)', monthlyBaseSalary: 350000 };
+      const scheduleHoursCount = getTeacherScheduledHoursCount(t.id);
+      return [
+        t.id,
+        t.name,
+        t.subjects.map(sid => subjects.find(s => s.id === sid)?.name || sid).join(', '),
+        ext.contractType,
+        ext.monthlyBaseSalary.toLocaleString() + " FCFA",
+        scheduleHoursCount + "h",
+        t.maxHoursPerWeek + "h",
+        t.email || '',
+        ext.phone || ''
+      ];
+    });
+
+    if (format === 'excel') {
+      const csvContent = "\uFEFF" + [headers.join(";")].concat(rows.map(r => r.map(val => `"${val.replace(/"/g, '""')}"`).join(";"))).join("\n");
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `liste_professeurs_${academicYear.replace(/\s+/g, '_')}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } else if (format === 'word') {
+      const htmlContent = `
+        <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+        <head>
+          <title>${title}</title>
+          <style>
+            body { font-family: Arial, sans-serif; }
+            h2 { color: #0b4998; text-align: center; }
+            table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+            th, td { border: 1px solid #000000; padding: 8px; text-align: left; font-size: 10pt; }
+            th { background-color: #f3f4f6; font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <h2>${title}</h2>
+          <p style="text-align: center; font-size: 10pt; color: #666;">Année Académique : ${academicYear}</p>
+          <table>
+            <thead>
+              <tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr>
+            </thead>
+            <tbody>
+              ${rows.map(row => `<tr>${row.map(cell => `<td>${cell}</td>`).join('')}</tr>`).join('')}
+            </tbody>
+          </table>
+        </body>
+        </html>
+      `;
+      const blob = new Blob([htmlContent], { type: 'application/msword' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `liste_professeurs_${academicYear.replace(/\s+/g, '_')}.doc`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } else if (format === 'pdf') {
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) return;
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>${title}</title>
+            <style>
+              body { font-family: system-ui, -apple-system, sans-serif; padding: 30px; color: #1e293b; }
+              .header { text-align: center; margin-bottom: 25px; }
+              h1 { color: #0b4998; margin: 0; font-size: 22px; }
+              .meta { font-size: 13px; color: #64748b; margin-top: 5px; }
+              table { width: 100%; border-collapse: collapse; margin-top: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+              th, td { border: 1px solid #e2e8f0; padding: 10px 12px; text-align: left; font-size: 11px; }
+              th { background-color: #f8fafc; font-weight: 700; color: #334155; }
+              tr:nth-child(even) { background-color: #f8fafc; }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <h1>${title}</h1>
+              <div class="meta">Année Scolaire ${academicYear} | Document officiel</div>
+            </div>
+            <table>
+              <thead>
+                <tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr>
+              </thead>
+              <tbody>
+                ${rows.map(row => `<tr>${row.map(cell => `<td>${cell}</td>`).join('')}</tr>`).join('')}
+              </tbody>
+            </table>
+            <script>
+              window.onload = function() {
+                window.print();
+                setTimeout(function() { window.close(); }, 500);
+              };
+            </script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+    }
+  };
+
   // UI state
   const [activeTab, setActiveTab] = useState<'hiring' | 'loads' | 'attendance'>('hiring');
   
@@ -364,9 +475,35 @@ export default function TeacherErpModule({
 
           {/* Right panel: Teachers directory */}
           <div className="lg:col-span-8 bg-white border border-slate-200 rounded-3xl p-5 shadow-xs overflow-hidden">
-            <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight pb-3 border-b border-indigo-50 mb-4">
-              Dossiers & Contrats Professoriaux Actuels ({teachers.length})
-            </h3>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-indigo-50 mb-4">
+              <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">
+                Dossiers & Contrats Professoriaux Actuels ({teachers.length})
+              </h3>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[10px] font-bold text-slate-400 uppercase mr-1">Exporter :</span>
+                <button
+                  type="button"
+                  onClick={() => exportTeachers('excel')}
+                  className="cursor-pointer px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl text-[10px] font-black uppercase transition flex items-center gap-1.5"
+                >
+                  Excel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => exportTeachers('word')}
+                  className="cursor-pointer px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl text-[10px] font-black uppercase transition flex items-center gap-1.5"
+                >
+                  Word
+                </button>
+                <button
+                  type="button"
+                  onClick={() => exportTeachers('pdf')}
+                  className="cursor-pointer px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-[10px] font-black uppercase transition flex items-center gap-1.5"
+                >
+                  PDF
+                </button>
+              </div>
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {teachers.map(t => {

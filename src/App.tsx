@@ -42,12 +42,14 @@ import EvaluationModule from './components/EvaluationModule';
 import AttendanceModule from './components/AttendanceModule';
 import FinancialModule from './components/FinancialModule';
 import PeripheralErpModules from './components/PeripheralErpModules';
+import ReportsCenter from './components/ReportsCenter';
 import { 
   Calendar, 
   LayoutDashboard, 
   Users, 
   School, 
   GraduationCap, 
+  FileText,
   BookOpen, 
   Sparkles, 
   Plus, 
@@ -202,10 +204,19 @@ export default function App() {
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, []);
-  
   // Selection filter for standard calendar
   const [calendarFilterType, setCalendarFilterType] = useState<'class' | 'teacher' | 'room'>('class');
   const [selectedFilterValue, setSelectedFilterValue] = useState<string>('6A');
+
+  // Batch scheduling states
+  const [isBatchTeacherModalOpen, setIsBatchTeacherModalOpen] = useState(false);
+  const [batchTeacherId, setBatchTeacherId] = useState('');
+  const [batchSubjectId, setBatchSubjectId] = useState('');
+  const [batchCellInputs, setBatchCellInputs] = useState<Record<string, { classId: string; roomId: string }>>({});
+
+  // Expanded class state
+  const [expandedClassId, setExpandedClassId] = useState<string | null>(null);
+  const [printClassId, setPrintClassId] = useState<string | null>(null);
 
   // Teacher portal state variables
   const [selectedProfPortalId, setSelectedProfPortalId] = useState<string>('prof_martin');
@@ -240,7 +251,7 @@ export default function App() {
   // Open/Close of right panel Gemini assistant drawer
   const [isAiDrawerOpen, setIsAiDrawerOpen] = useState(false);
   const [aiChatHistory, setAiChatHistory] = useState<Array<{ role: 'user' | 'model'; text: string }>>([
-    { role: 'model', text: "Bonjour ! Je suis l'Assistant intelligent de BARAKATPLANNING. Je peux vous aider à analyser la structure de vos plannings, déceler des propositions de remplacement d'heures en conflit ou générer automatiquement des sessions d'apprentissage pour vos classes." }
+    { role: 'model', text: "Bonjour ! Je suis l'Assistant intelligent de Emploi du Temps PRO. Je peux vous aider à analyser la structure de vos plannings, déceler des propositions de remplacement d'heures en conflit ou générer automatiquement des sessions d'apprentissage pour vos classes." }
   ]);
   const [customAiPrompt, setCustomAiPrompt] = useState('');
   const [isAiLoading, setIsAiLoading] = useState(false);
@@ -285,6 +296,105 @@ export default function App() {
   const [activationError, setActivationError] = useState('');
   const [activationCodes, setActivationCodes] = useState<ActivationCode[]>([]);
 
+  const exportClasses = (format: 'excel' | 'pdf' | 'word') => {
+    const title = "Liste des Classes - " + schoolName;
+    const headers = ["Identifiant", "Nom de la Classe", "Nombre d'élèves", "Couleur Thématique"];
+    
+    const rows = classes.map(c => [
+      c.id,
+      c.name,
+      c.capacity.toString() + " élèves",
+      c.color
+    ]);
+
+    if (format === 'excel') {
+      const csvContent = "\uFEFF" + [headers.join(";")].concat(rows.map(r => r.map(val => `"${val.replace(/"/g, '""')}"`).join(";"))).join("\n");
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `liste_classes_${academicYear.replace(/\s+/g, '_')}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } else if (format === 'word') {
+      const htmlContent = `
+        <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+        <head>
+          <title>${title}</title>
+          <style>
+            body { font-family: Arial, sans-serif; }
+            h2 { color: #0b4998; text-align: center; }
+            table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+            th, td { border: 1px solid #000000; padding: 8px; text-align: left; font-size: 10pt; }
+            th { background-color: #f3f4f6; font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <h2>${title}</h2>
+          <p style="text-align: center; font-size: 10pt; color: #666;">Année Académique : ${academicYear}</p>
+          <table>
+            <thead>
+              <tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr>
+            </thead>
+            <tbody>
+              ${rows.map(row => `<tr>${row.map(cell => `<td>${cell}</td>`).join('')}</tr>`).join('')}
+            </tbody>
+          </table>
+        </body>
+        </html>
+      `;
+      const blob = new Blob([htmlContent], { type: 'application/msword' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `liste_classes_${academicYear.replace(/\s+/g, '_')}.doc`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } else if (format === 'pdf') {
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) return;
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>${title}</title>
+            <style>
+              body { font-family: system-ui, -apple-system, sans-serif; padding: 30px; color: #1e293b; }
+              .header { text-align: center; margin-bottom: 25px; }
+              h1 { color: #0b4998; margin: 0; font-size: 22px; }
+              .meta { font-size: 13px; color: #64748b; margin-top: 5px; }
+              table { width: 100%; border-collapse: collapse; margin-top: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+              th, td { border: 1px solid #e2e8f0; padding: 10px 12px; text-align: left; font-size: 11px; }
+              th { background-color: #f8fafc; font-weight: 700; color: #334155; }
+              tr:nth-child(even) { background-color: #f8fafc; }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <h1>${title}</h1>
+              <div class="meta">Année Scolaire ${academicYear} | Document officiel</div>
+            </div>
+            <table>
+              <thead>
+                <tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr>
+              </thead>
+              <tbody>
+                ${rows.map(row => `<tr>${row.map(cell => `<td>${cell}</td>`).join('')}</tr>`).join('')}
+              </tbody>
+            </table>
+            <script>
+              window.onload = function() {
+                window.print();
+                setTimeout(function() { window.close(); }, 500);
+              };
+            </script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+    }
+  };
 
   // Supabase Live Synchronization Core Engine
   const [supabaseStatus, setSupabaseStatus] = useState<'idle' | 'connecting' | 'synced' | 'error_tables' | 'error_auth'>('connecting');
@@ -746,6 +856,51 @@ export default function App() {
     }
   };
 
+  // Batch scheduling operations
+  const handleAddBatchCourse = (dayId: string, slotId: string) => {
+    if (!batchTeacherId || !batchSubjectId) {
+      alert("Veuillez sélectionner un enseignant et une matière !");
+      return;
+    }
+    const input = batchCellInputs[`${dayId}_${slotId}`] || { classId: classes[0]?.id || '', roomId: rooms[0]?.id || '' };
+    if (!input.classId || !input.roomId) {
+      alert("Veuillez sélectionner une classe et une salle !");
+      return;
+    }
+
+    // Check if teacher is busy
+    const teacherBusy = courses.some(c => c.teacherId === batchTeacherId && c.dayId === dayId && c.slotId === slotId);
+    if (teacherBusy) {
+      if (!window.confirm("Cet enseignant a déjà un cours sur ce créneau. Voulez-vous quand même planifier ce cours (cela créera un conflit) ?")) {
+        return;
+      }
+    }
+
+    // Check if class is busy
+    const classBusy = courses.some(c => c.classId === input.classId && c.dayId === dayId && c.slotId === slotId);
+    if (classBusy) {
+      if (!window.confirm("Cette classe a déjà un cours sur ce créneau. Voulez-vous quand même planifier ce cours ?")) {
+        return;
+      }
+    }
+
+    const newCourse: ScheduleCourse = {
+      id: `c_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+      classId: input.classId,
+      teacherId: batchTeacherId,
+      subjectId: batchSubjectId,
+      roomId: input.roomId,
+      dayId,
+      slotId
+    };
+
+    setCourses(prev => [...prev, newCourse]);
+  };
+
+  const handleDeleteBatchCourse = (courseId: string) => {
+    setCourses(prev => prev.filter(c => c.id !== courseId));
+  };
+
   // Quick Action: Auto-complete or schedule via AI endpoint
   const handleTriggerWizardGeneration = async () => {
     setIsWizardLoading(true);
@@ -1089,7 +1244,7 @@ export default function App() {
           <div className="h-[2px] w-12 bg-red-950 rounded-full my-6 mx-auto"></div>
 
           <p className="text-xs text-slate-300 leading-relaxed text-center px-2">
-            Le code de sécurité et de droit d'auteur du logiciel <strong>BARAKATPLANNING</strong> interdit formellement le clonage, la reproduction ou la redistribution brute de ses fichiers sur un domaine non enregistré.
+            Le code de sécurité et de droit d'auteur du logiciel <strong>Emploi du Temps PRO</strong> interdit formellement le clonage, la reproduction ou la redistribution brute de ses fichiers sur un domaine non enregistré.
           </p>
           
           <p className="text-xs text-slate-400 mt-4 leading-relaxed text-center px-4 bg-slate-950/40 p-3.5 border border-slate-900 rounded-2xl font-mono">
@@ -1212,6 +1367,148 @@ export default function App() {
         }}
       />
     );
+  }
+
+  if (printClassId) {
+    const cls = classes.find(c => c.id === printClassId);
+    if (cls) {
+      const savedStudents = localStorage.getItem('erp_student_records');
+      const studentsList = savedStudents ? JSON.parse(savedStudents) : [
+        { id: 'std_1', firstName: 'Koffi', lastName: 'Yao Anderson', gender: 'M', classId: '6A', tutorName: 'Koffi Blaise', status: 'Inscrit', matricule: 'M-2025-4102', city: 'Abidjan' },
+        { id: 'std_2', firstName: 'Diomandé', lastName: 'Aminata', gender: 'F', classId: '6B', tutorName: 'Diomandé Lanciné', status: 'Réinscrit', matricule: 'M-2024-1185', city: 'Abidjan' },
+        { id: 'std_3', firstName: 'Kouassi', lastName: 'Koffi Charles', gender: 'M', classId: '3A', tutorName: 'Mme Kouassi Hortense', status: 'Inscrit', matricule: 'M-2025-9981', city: 'Bingerville' },
+        { id: 'std_4', firstName: 'Sylla', lastName: 'Ibrahim Karim', gender: 'M', classId: '3B', tutorName: 'Sylla Fatoumata', status: 'Réinscrit', matricule: 'M-2023-0056', city: 'Plateau' },
+        { id: 'std_5', firstName: 'Gomez', lastName: 'Marie-Chantal Enola', gender: 'F', classId: '3A', tutorName: 'Gomez Robert (Ambass.)', status: 'Inscrit', matricule: 'M-2025-0103', city: 'Abidjan' }
+      ];
+      const classStudents = studentsList.filter((s: any) => s.classId === cls.id);
+      const classCourses = courses.filter(c => c.classId === cls.id);
+      const teacherIds = Array.from(new Set(classCourses.map(c => c.teacherId)));
+      const classTeachers = teachers.filter(t => teacherIds.includes(t.id));
+
+      return (
+        <div className="bg-white text-black p-8 min-h-screen font-sans space-y-6">
+          {/* Header */}
+          <div className="border-b-2 border-slate-900 pb-4 flex justify-between items-end">
+            <div>
+              <div className="text-xs text-rose-600 font-extrabold uppercase tracking-widest">{schoolName} — {schoolSubName}</div>
+              <h1 className="text-xl font-black uppercase tracking-tight text-slate-900 mt-1">
+                FICHE OFFICIELLE DE CLASSE : {cls.name}
+              </h1>
+              <p className="text-xs text-slate-500 font-medium mt-0.5">
+                Rapport de Roster & Affectation des Enseignants — Année Académique {academicYear}
+              </p>
+            </div>
+            <div className="text-right text-xs text-slate-550 font-bold">
+              <div>Capacité : <strong>{cls.capacity} places</strong></div>
+              <div>Date d'impression : <strong>{new Date().toLocaleDateString('fr-FR')}</strong></div>
+            </div>
+          </div>
+
+          {/* Grid two columns: left for students (2/3), right for teachers (1/3) */}
+          <div className="grid grid-cols-12 gap-6 items-start">
+            
+            {/* Left: Students list (col-span-8) */}
+            <div className="col-span-8 space-y-3 text-left">
+              <div className="flex items-center gap-2 pb-1.5 border-b border-slate-200">
+                <span className="text-sm font-black text-indigo-950 uppercase">👥 Liste des Élèves Inscrits ({classStudents.length})</span>
+              </div>
+              
+              {classStudents.length > 0 ? (
+                <table className="w-full text-left border-collapse border border-slate-300 text-xs">
+                  <thead>
+                    <tr className="bg-slate-105 border-b border-slate-300">
+                      <th className="p-2 font-bold border border-slate-300 text-center w-10">N°</th>
+                      <th className="p-2 font-bold border border-slate-300">Matricule</th>
+                      <th className="p-2 font-bold border border-slate-300">Nom & Prénoms</th>
+                      <th className="p-2 font-bold border border-slate-300 text-center w-12">Genre</th>
+                      <th className="p-2 font-bold border border-slate-300">Tuteur / Contact</th>
+                      <th className="p-2 font-bold border border-slate-300 text-center w-24">Émargement</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {classStudents.map((std: any, idx: number) => (
+                      <tr key={std.id} className="border-b border-slate-250">
+                        <td className="p-2 border border-slate-200 text-center font-bold text-slate-500">{idx + 1}</td>
+                        <td className="p-2 border border-slate-200 font-mono text-[10.5px] font-bold text-[#0b4998]">{std.matricule}</td>
+                        <td className="p-2 border border-slate-200 font-extrabold text-slate-800">{std.lastName} {std.firstName}</td>
+                        <td className="p-2 border border-slate-200 text-center font-bold">{std.gender}</td>
+                        <td className="p-2 border border-slate-200 font-medium text-slate-600 text-[10.5px]">
+                          {std.tutorName} ({std.tutorPhone})
+                        </td>
+                        <td className="p-2 border border-slate-200"></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="p-6 border border-slate-200 rounded-xl text-center text-slate-400 italic">
+                  Aucun élève n'est inscrit dans cette classe.
+                </div>
+              )}
+            </div>
+
+            {/* Right: Teachers list (col-span-4) */}
+            <div className="col-span-4 space-y-3 text-left">
+              <div className="flex items-center gap-2 pb-1.5 border-b border-slate-200">
+                <span className="text-sm font-black text-emerald-950 uppercase">🎓 Professeurs Affectés ({classTeachers.length})</span>
+              </div>
+
+              {classTeachers.length > 0 ? (
+                <table className="w-full text-left border-collapse border border-slate-300 text-xs">
+                  <thead>
+                    <tr className="bg-slate-105 border-b border-slate-300">
+                      <th className="p-2 font-bold border border-slate-300">Enseignant</th>
+                      <th className="p-2 font-bold border border-slate-300">Matière(s)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {classTeachers.map(tch => {
+                      const subjectsTaught = Array.from(new Set(
+                        courses.filter(c => c.classId === cls.id && c.teacherId === tch.id)
+                               .map(c => subjects.find(s => s.id === c.subjectId)?.name || c.subjectId)
+                      ));
+                      return (
+                        <tr key={tch.id} className="border-b border-slate-250">
+                          <td className="p-2 border border-slate-200 font-extrabold text-slate-800">{tch.name}</td>
+                          <td className="p-2 border border-slate-200 font-bold text-slate-500 text-[10.5px] uppercase">
+                            {subjectsTaught.join(', ')}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="p-6 border border-slate-200 rounded-xl text-center text-slate-400 italic">
+                  Aucun cours ni enseignant n'est planifié pour cette classe.
+                </div>
+              )}
+
+              {/* Administrative info card */}
+              <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl text-[10px] text-slate-500 space-y-1">
+                <div className="font-extrabold text-slate-700 uppercase tracking-wide">💡 RAPPEL DE SÉCURITÉ</div>
+                <p className="leading-relaxed">
+                  Cette fiche est générée à partir des données de scolarité de l'établissement. Toute modification de classe ou d'affectation doit être effectuée et validée par l'administration générale.
+                </p>
+              </div>
+            </div>
+
+          </div>
+
+          {/* Footer signature box */}
+          <div className="pt-8 border-t border-slate-200 grid grid-cols-2 gap-8 text-center text-xs">
+            <div>
+              <span className="font-bold text-slate-500 block uppercase mb-12">Le Secrétaire Général</span>
+              <div className="border-b border-slate-400 w-48 mx-auto" />
+            </div>
+            <div>
+              <span className="font-bold text-slate-500 block uppercase mb-12">Visa de la Direction (Signature et Cachet)</span>
+              <div className="border-b border-slate-400 w-48 mx-auto" />
+            </div>
+          </div>
+        </div>
+      );
+    }
   }
 
   return (
@@ -1348,6 +1645,13 @@ export default function App() {
               items: [
                 { id: "erp_academic", name: "Syllabus & Progression", icon: <BookOpen className="h-4 w-4 text-[#0b4998]" />, desc: "Progression et cahier de textes" },
                 { id: "erp_evaluations", name: "Notes & Bulletins", icon: <Award className="h-4 w-4 text-[#ee7b11]" />, desc: "Saisie de notes et calcul des moyennes" },
+              ]
+            },
+            {
+              id: "reports",
+              label: "📋 Rapports & Listes",
+              items: [
+                { id: "reports_center", name: "Centre de Rapports", icon: <FileText className="h-4 w-4 text-emerald-500" />, desc: "Imprimer les listes d'élèves, profs et mérites" }
               ]
             },
             {
@@ -1841,6 +2145,37 @@ export default function App() {
                     </div>
  
                     <div className="flex flex-wrap items-center gap-2">
+                      {userRole === 'super_admin' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const defaultTeacher = calendarFilterType === 'teacher' && teachers.some(t => t.id === selectedFilterValue)
+                              ? selectedFilterValue
+                              : (teachers[0]?.id || '');
+                            setBatchTeacherId(defaultTeacher);
+                            const tObj = teachers.find(t => t.id === defaultTeacher);
+                            setBatchSubjectId(tObj?.subjects[0] || (subjects[0]?.id || ''));
+                            // initialize inputs
+                            const initialInputs: Record<string, { classId: string; roomId: string }> = {};
+                            DAYS.forEach(d => {
+                              TIME_SLOTS.forEach(s => {
+                                initialInputs[`${d.id}_${s.id}`] = {
+                                  classId: classes[0]?.id || '',
+                                  roomId: rooms[0]?.id || ''
+                                };
+                              });
+                            });
+                            setBatchCellInputs(initialInputs);
+                            setIsBatchTeacherModalOpen(true);
+                          }}
+                          className="cursor-pointer px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-md shrink-0 border border-indigo-500"
+                          title="Saisir rapidement tout le planning d'un enseignant sur une seule grille"
+                        >
+                          <Users className="h-4 w-4 text-indigo-100" />
+                          <span>Saisie Rapide Enseignant</span>
+                        </button>
+                      )}
+
                       <button
                         onClick={() => window.print()}
                         className="cursor-pointer px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-md shrink-0 border border-slate-700"
@@ -2404,41 +2739,167 @@ export default function App() {
                   </div>
 
                   {/* List current classes */}
-                  <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs overflow-hidden">
-                    <h3 className="text-base font-bold text-slate-900 mb-4">Classes de l'établissement</h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                      {classes.map(cls => (
-                        <div key={cls.id} className="border border-slate-200 rounded-2xl p-4 space-y-2 flex flex-col justify-between hover:shadow-xs transition">
-                          <div>
-                            <span className="font-extrabold text-indigo-800 tracking-tight text-sm block">{cls.name}</span>
-                            <span className="text-[10px] text-slate-400 block uppercase">Code ID : {cls.id}</span>
-                          </div>
-                          
-                          <div className="pt-2 border-t border-slate-150 flex items-center justify-between text-xs font-bold">
-                            <span className="text-slate-655">{cls.capacity} élèves inscrits</span>
-                            <div className="flex items-center gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => handleStartEditClass(cls)}
-                                className="cursor-pointer text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 p-1.5 rounded-lg flex items-center justify-center transition"
-                                title="Modifier la classe"
-                              >
-                                <Edit className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteClassDb(cls.id)}
-                                className="cursor-pointer text-red-500 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-lg flex items-center justify-center transition"
-                                title="Supprimer la classe"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
+                  {(() => {
+                    const studentsList = (() => {
+                      const saved = localStorage.getItem('erp_student_records');
+                      if (saved) return JSON.parse(saved);
+                      return [
+                        { id: 'std_1', firstName: 'Koffi', lastName: 'Yao Anderson', gender: 'M', classId: '6A', tutorName: 'Koffi Blaise', status: 'Inscrit', matricule: 'M-2025-4102', city: 'Abidjan' },
+                        { id: 'std_2', firstName: 'Diomandé', lastName: 'Aminata', gender: 'F', classId: '6B', tutorName: 'Diomandé Lanciné', status: 'Réinscrit', matricule: 'M-2024-1185', city: 'Abidjan' },
+                        { id: 'std_3', firstName: 'Kouassi', lastName: 'Koffi Charles', gender: 'M', classId: '3A', tutorName: 'Mme Kouassi Hortense', status: 'Inscrit', matricule: 'M-2025-9981', city: 'Bingerville' },
+                        { id: 'std_4', firstName: 'Sylla', lastName: 'Ibrahim Karim', gender: 'M', classId: '3B', tutorName: 'Sylla Fatoumata', status: 'Réinscrit', matricule: 'M-2023-0056', city: 'Plateau' },
+                        { id: 'std_5', firstName: 'Gomez', lastName: 'Marie-Chantal Enola', gender: 'F', classId: '3A', tutorName: 'Gomez Robert (Ambass.)', status: 'Inscrit', matricule: 'M-2025-0103', city: 'Abidjan' }
+                      ];
+                    })();
+
+                    return (
+                      <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs overflow-hidden">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+                          <h3 className="text-base font-bold text-slate-900">Classes de l'établissement</h3>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase mr-1">Exporter :</span>
+                            <button
+                              type="button"
+                              onClick={() => exportClasses('excel')}
+                              className="cursor-pointer px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl text-[10px] font-black uppercase transition flex items-center gap-1.5"
+                            >
+                              Excel
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => exportClasses('word')}
+                              className="cursor-pointer px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl text-[10px] font-black uppercase transition flex items-center gap-1.5"
+                            >
+                              Word
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => exportClasses('pdf')}
+                              className="cursor-pointer px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-[10px] font-black uppercase transition flex items-center gap-1.5"
+                            >
+                              PDF
+                            </button>
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-start">
+                          {classes.map(cls => {
+                            const classStudents = studentsList.filter((s: any) => s.classId === cls.id);
+                            const classCourses = courses.filter(c => c.classId === cls.id);
+                            const teacherIds = Array.from(new Set(classCourses.map(c => c.teacherId)));
+                            const classTeachers = teachers.filter(t => teacherIds.includes(t.id));
+
+                            return (
+                              <div key={cls.id} className="border border-slate-200 rounded-2xl p-4 space-y-2 flex flex-col justify-between hover:shadow-xs transition bg-white">
+                                <div>
+                                  <span className="font-extrabold text-indigo-800 tracking-tight text-sm block">{cls.name}</span>
+                                  <span className="text-[10px] text-slate-400 block uppercase">Code ID : {cls.id}</span>
+                                </div>
+                                
+                                {/* Details Accordion toggler */}
+                                <div className="pt-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => setExpandedClassId(expandedClassId === cls.id ? null : cls.id)}
+                                    className="cursor-pointer w-full text-left py-1.5 px-2 bg-slate-50 hover:bg-slate-100 rounded-lg text-[10px] font-bold text-slate-555 flex items-center justify-between transition border border-slate-200/60"
+                                  >
+                                    <span>Élèves ({classStudents.length}) & Profs ({classTeachers.length})</span>
+                                    <ChevronDown className={`h-3 w-3 transition-transform ${expandedClassId === cls.id ? 'rotate-180' : ''}`} />
+                                  </button>
+                                </div>
+
+                                {expandedClassId === cls.id && (
+                                  <div className="py-2.5 space-y-3 text-left border-t border-slate-100 mt-2 animate-in fade-in slide-in-from-top-1 duration-150">
+                                    {/* Students section */}
+                                    <div className="space-y-1">
+                                      <span className="text-[9px] font-black text-indigo-700 uppercase tracking-wider block">
+                                        👥 Élèves inscrits ({classStudents.length})
+                                      </span>
+                                      {classStudents.length > 0 ? (
+                                        <div className="max-h-24 overflow-y-auto pr-1 space-y-1">
+                                          {classStudents.map((std: any) => (
+                                            <div key={std.id} className="text-[10px] font-bold text-slate-700 flex justify-between bg-slate-50/70 p-1 rounded border border-slate-100">
+                                              <span className="truncate max-w-[120px]">{std.lastName} {std.firstName}</span>
+                                              <span className="text-[8px] font-mono text-slate-400 font-bold">{std.matricule}</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <p className="text-[9px] italic text-slate-400">Aucun élève inscrit.</p>
+                                      )}
+                                    </div>
+
+                                    {/* Teachers section */}
+                                    <div className="space-y-1">
+                                      <span className="text-[9px] font-black text-emerald-700 uppercase tracking-wider block">
+                                        🎓 Professeurs affectés ({classTeachers.length})
+                                      </span>
+                                      {classTeachers.length > 0 ? (
+                                        <div className="max-h-24 overflow-y-auto pr-1 space-y-1">
+                                          {classTeachers.map(tch => {
+                                            // Get subjects taught by this teacher in this class
+                                            const subjectsTaught = Array.from(new Set(
+                                              courses.filter(c => c.classId === cls.id && c.teacherId === tch.id)
+                                                     .map(c => subjects.find(s => s.id === c.subjectId)?.name || c.subjectId)
+                                            ));
+                                            return (
+                                              <div key={tch.id} className="text-[10px] font-bold text-slate-700 bg-slate-50/70 p-1 rounded border border-slate-100 space-y-0.5">
+                                                <div className="font-extrabold text-slate-800 leading-snug">{tch.name}</div>
+                                                <div className="text-[8px] font-black text-slate-400 uppercase leading-none">
+                                                  {subjectsTaught.join(', ')}
+                                                </div>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      ) : (
+                                        <p className="text-[9px] italic text-slate-400">Aucun cours planifié.</p>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+
+                                <div className="pt-2 border-t border-slate-150 flex items-center justify-between text-xs font-bold">
+                                  <span className="text-slate-655">{cls.capacity} élèves (Cap.)</span>
+                                  <div className="flex items-center gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setPrintClassId(cls.id);
+                                        setTimeout(() => {
+                                          window.print();
+                                          setPrintClassId(null);
+                                        }, 250);
+                                      }}
+                                      className="cursor-pointer text-emerald-655 hover:text-emerald-850 hover:bg-emerald-50 p-1.5 rounded-lg flex items-center justify-center transition"
+                                      title="Imprimer la Fiche de Classe A4 (Élèves & Profs)"
+                                    >
+                                      <Printer className="h-3.5 w-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleStartEditClass(cls)}
+                                      className="cursor-pointer text-indigo-650 hover:text-indigo-800 hover:bg-indigo-50 p-1.5 rounded-lg flex items-center justify-center transition"
+                                      title="Modifier la classe"
+                                    >
+                                      <Edit className="h-3.5 w-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteClassDb(cls.id)}
+                                      className="cursor-pointer text-red-500 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-lg flex items-center justify-center transition"
+                                      title="Supprimer la classe"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
 
@@ -2578,6 +3039,20 @@ export default function App() {
                   setSchoolDirector={setSchoolDirector}
                   schoolMotto={schoolMotto}
                   setSchoolMotto={setSchoolMotto}
+                />
+              )}
+
+              {/* TAB: Reports Center */}
+              {activeTab === 'reports_center' && (
+                <ReportsCenter
+                  classes={classes}
+                  teachers={teachers}
+                  courses={courses}
+                  subjects={subjects}
+                  schoolName={schoolName}
+                  schoolSubName={schoolSubName}
+                  schoolMotto={schoolMotto}
+                  academicYear={academicYear}
                 />
               )}
 
@@ -3039,7 +3514,7 @@ export default function App() {
 
       {/* FOOTER credit brand line */}
       <footer className="text-center py-3 bg-slate-900 text-[10px] text-slate-550 border-t border-indigo-950/40 shrink-0">
-         BARAKATPLANNING v2.5 — Confectionné sur mesure pour la gestion et l'ordonnancement scolaire
+         emploi du temps PRO v2.5 — Confectionné sur mesure pour la gestion et l'ordonnancement scolaire
       </footer>
 
       {/* ================= MODAL : ADD / EDIT COURSE ================= */}
@@ -3140,13 +3615,221 @@ export default function App() {
                 </button>
                 <button
                   type="submit"
-                  className="cursor-pointer px-4 py-2 bg-indigo-650 hover:bg-indigo-600 text-white text-xs font-bold rounded-xl transition shadow flex items-center gap-1"
+                  className="cursor-pointer px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition shadow flex items-center gap-1"
                 >
                   <Check className="h-3.5 w-3.5" />
                   <span>{editingCourseId ? "Sauvegarder" : "Inscrire au planning"}</span>
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL : BATCH TEACHER SCHEDULER ================= */}
+      {isBatchTeacherModalOpen && (
+        <div id="batch-teacher-modal" className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl border border-slate-100 shadow-2xl max-w-5xl w-full overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="px-5 py-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
+              <div>
+                <h3 className="font-extrabold text-sm text-white flex items-center gap-2">
+                  <Users className="h-4 w-4 text-[#f3aa1c]" />
+                  <span>Saisie Rapide : Emploi du Temps par Enseignant</span>
+                </h3>
+                <p className="text-[10px] text-indigo-300 font-semibold uppercase mt-0.5">
+                  Planifier tous les cours d'un enseignant pour toutes ses classes en une seule fois
+                </p>
+              </div>
+              <button 
+                onClick={() => setIsBatchTeacherModalOpen(false)}
+                className="cursor-pointer text-slate-300 hover:text-white p-1 rounded-lg hover:bg-white/10 transition"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Config bar */}
+            <div className="p-4 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 shrink-0">
+              <div className="flex flex-wrap items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <label className="text-xs font-bold text-slate-550">Enseignant :</label>
+                  <select
+                    value={batchTeacherId}
+                    onChange={(e) => {
+                      const tId = e.target.value;
+                      setBatchTeacherId(tId);
+                      const tObj = teachers.find(t => t.id === tId);
+                      setBatchSubjectId(tObj?.subjects[0] || (subjects[0]?.id || ''));
+                    }}
+                    className="px-3 py-1.5 bg-white border border-slate-250 hover:border-slate-350 rounded-xl text-xs font-semibold text-slate-800"
+                  >
+                    <option value="">Sélectionnez un enseignant</option>
+                    {teachers.map(t => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <label className="text-xs font-bold text-slate-550">Matière Enseignée :</label>
+                  <select
+                    value={batchSubjectId}
+                    onChange={(e) => setBatchSubjectId(e.target.value)}
+                    className="px-3 py-1.5 bg-white border border-slate-250 hover:border-slate-350 rounded-xl text-xs font-semibold text-slate-800"
+                  >
+                    <option value="">Sélectionnez une matière</option>
+                    {(() => {
+                      const tObj = teachers.find(t => t.id === batchTeacherId);
+                      const allowedSubjects = tObj ? subjects.filter(s => tObj.subjects.includes(s.id)) : subjects;
+                      return allowedSubjects.map(s => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ));
+                    })()}
+                  </select>
+                </div>
+              </div>
+
+              <div className="text-[11px] text-slate-500 font-semibold italic flex items-center gap-1 bg-indigo-50 border border-indigo-150 rounded-xl px-3 py-1.5 text-indigo-900">
+                <Info className="h-3.5 w-3.5 shrink-0" />
+                <span>Sélectionnez la classe et la salle pour un créneau, puis cliquez sur "+" pour l'inscrire.</span>
+              </div>
+            </div>
+
+            {/* Grid Area */}
+            <div className="flex-1 overflow-auto p-5">
+              <table className="w-full border-collapse min-w-[800px]">
+                <thead>
+                  <tr className="border-b border-slate-200">
+                    <th className="w-24 p-2 text-left text-xs font-bold text-slate-400 tracking-wider uppercase">
+                      Créneau
+                    </th>
+                    {DAYS.map(day => (
+                      <th key={day.id} className="p-2 text-center text-xs font-black text-slate-800 uppercase tracking-wide">
+                        {day.name}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {TIME_SLOTS.map(slot => (
+                    <tr key={slot.id} className="border-b border-slate-100 hover:bg-slate-50/40">
+                      <td className="p-2 font-semibold text-xs text-slate-550 border-r border-slate-100">
+                        <div className="font-bold text-slate-800">{slot.id}</div>
+                        <div className="text-[9px] mt-0.5">{slot.start} - {slot.end}</div>
+                      </td>
+
+                      {DAYS.map(day => {
+                        const cellKey = `${day.id}_${slot.id}`;
+                        const currentCourses = courses.filter(
+                          c => c.teacherId === batchTeacherId && c.dayId === day.id && c.slotId === slot.id
+                        );
+                        
+                        const input = batchCellInputs[cellKey] || {
+                          classId: classes[0]?.id || '',
+                          roomId: rooms[0]?.id || ''
+                        };
+
+                        return (
+                          <td key={day.id} className="p-2 border-r border-slate-100 align-middle text-center w-[16%]">
+                            {currentCourses.length > 0 ? (
+                              <div className="space-y-1.5">
+                                {currentCourses.map(course => {
+                                  const classObj = classes.find(c => c.id === course.classId);
+                                  const roomObj = rooms.find(r => r.id === course.roomId);
+                                  const subObj = subjects.find(s => s.id === course.subjectId);
+                                  return (
+                                    <div key={course.id} className="bg-indigo-50 border border-indigo-200/80 rounded-xl p-1.5 text-left text-[10px] relative group/cell flex flex-col justify-between">
+                                      <div className="flex justify-between items-start">
+                                        <span className="font-extrabold text-indigo-950 truncate block max-w-[80px]">
+                                          {subObj?.name || course.subjectId}
+                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleDeleteBatchCourse(course.id)}
+                                          className="cursor-pointer text-red-500 hover:text-red-700 hover:bg-red-50 p-0.5 rounded transition shrink-0 ml-1"
+                                          title="Retirer ce cours"
+                                        >
+                                          <X className="h-3 w-3" />
+                                        </button>
+                                      </div>
+                                      <div className="text-[9px] text-slate-500 font-bold space-y-0.5 mt-1">
+                                        <div className="flex items-center gap-0.5">
+                                          <GraduationCap className="h-2.5 w-2.5" />
+                                          <span>{classObj?.name || course.classId}</span>
+                                        </div>
+                                        <div className="flex items-center gap-0.5">
+                                          <School className="h-2.5 w-2.5" />
+                                          <span>{roomObj?.name || course.roomId}</span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <div className="flex flex-col gap-1">
+                                <select
+                                  value={input.classId}
+                                  onChange={(e) => {
+                                    setBatchCellInputs(prev => ({
+                                      ...prev,
+                                      [cellKey]: { ...input, classId: e.target.value }
+                                    }));
+                                  }}
+                                  className="w-full px-1.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-semibold text-slate-800 focus:bg-white"
+                                >
+                                  <option value="">Classe...</option>
+                                  {classes.map(c => (
+                                    <option key={c.id} value={c.id}>{c.name}</option>
+                                  ))}
+                                </select>
+                                <div className="flex items-center gap-1">
+                                  <select
+                                    value={input.roomId}
+                                    onChange={(e) => {
+                                      setBatchCellInputs(prev => ({
+                                        ...prev,
+                                        [cellKey]: { ...input, roomId: e.target.value }
+                                      }));
+                                    }}
+                                    className="flex-1 px-1.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-semibold text-slate-800 focus:bg-white"
+                                  >
+                                    <option value="">Salle...</option>
+                                    {rooms.map(r => (
+                                      <option key={r.id} value={r.id}>{r.name}</option>
+                                    ))}
+                                  </select>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAddBatchCourse(day.id, slot.id)}
+                                    className="cursor-pointer p-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition shadow-xs flex items-center justify-center shrink-0"
+                                    title="Ajouter à ce créneau"
+                                  >
+                                    <Plus className="h-3 w-3" />
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-5 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsBatchTeacherModalOpen(false)}
+                className="cursor-pointer px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition shadow"
+              >
+                Terminer la saisie
+              </button>
+            </div>
           </div>
         </div>
       )}
