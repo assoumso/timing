@@ -9,7 +9,9 @@ import {
   Users, 
   FileSpreadsheet, 
   Activity,
-  Award
+  Award,
+  Sliders,
+  UserCheck
 } from 'lucide-react';
 import { ClassItem } from '../types';
 
@@ -25,7 +27,8 @@ interface FinancialModuleProps {
 interface TuitionFeeRate {
   classId: string;
   className: string;
-  amount: number;
+  amountNonAffecte: number; // Privatised fee (Non Affecté)
+  amountAffecte: number; // State subsidised parental fee (Affecté)
 }
 
 interface PaymentTransaction {
@@ -35,9 +38,20 @@ interface PaymentTransaction {
   classId: string;
   amount: number;
   paymentMethod: 'Cash (Caisse)' | 'Wave Mobile' | 'Orange Money' | 'Virement Bancaire';
-  refNo: string; // Wave signature ref
+  refNo: string;
   recordedAt: string;
   receiptNo: string;
+}
+
+interface StudentRecord {
+  id: string;
+  firstName: string;
+  lastName: string;
+  gender: 'M' | 'F';
+  classId: string;
+  status: string;
+  matricule: string;
+  assignmentStatus?: 'Affecté' | 'Non Affecté'; // State-sponsored (Affecté) vs Private (Non Affecté)
 }
 
 export default function FinancialModule({
@@ -50,31 +64,55 @@ export default function FinancialModule({
 }: FinancialModuleProps) {
   
   // Resolve student list dynamically
-  const [studentList, setStudentList] = useState<any[]>([]);
+  const [studentList, setStudentList] = useState<StudentRecord[]>([]);
+
   useEffect(() => {
+    loadStudents();
+  }, []);
+
+  const loadStudents = () => {
     const saved = localStorage.getItem('erp_student_records');
     if (saved) {
-      setStudentList(JSON.parse(saved));
+      const parsed = JSON.parse(saved);
+      // Ensure all students have assignmentStatus field (defaulting to 'Non Affecté' if empty)
+      const initialized = parsed.map((s: any) => ({
+        ...s,
+        assignmentStatus: s.assignmentStatus || 'Non Affecté'
+      }));
+      setStudentList(initialized);
     } else {
-      setStudentList([
-        { id: 'std_1', firstName: 'Koffi', lastName: 'Yao Anderson', classId: '6A', status: 'Inscrit', matricule: 'M-2025-4102' },
-        { id: 'std_2', firstName: 'Diomandé', lastName: 'Aminata', classId: '6B', status: 'Réinscrit', matricule: 'M-2024-1185' },
-        { id: 'std_3', firstName: 'Kouassi', lastName: 'Koffi Charles', classId: '3A', status: 'Inscrit', matricule: 'M-2025-9981' },
-         { id: 'std_4', firstName: 'Sylla', lastName: 'Ibrahim Karim', classId: '3B', status: 'Réinscrit', matricule: 'M-2023-0056' },
-        { id: 'std_5', firstName: 'Gomez', lastName: 'Marie-Chantal Enola', classId: '3A', status: 'Inscrit', matricule: 'M-2025-0103' }
-      ]);
+      const defaults: StudentRecord[] = [
+        { id: 'std_1', firstName: 'Koffi', lastName: 'Yao Anderson', gender: 'M', classId: '6A', status: 'Inscrit', matricule: 'M-2026-4102', assignmentStatus: 'Non Affecté' },
+        { id: 'std_2', firstName: 'Diomandé', lastName: 'Aminata', gender: 'F', classId: '6B', status: 'Réinscrit', matricule: 'M-2024-1185', assignmentStatus: 'Affecté' },
+        { id: 'std_3', firstName: 'Kouassi', lastName: 'Koffi Charles', gender: 'M', classId: '3A', status: 'Inscrit', matricule: 'M-2026-9981', assignmentStatus: 'Non Affecté' },
+        { id: 'std_4', firstName: 'Sylla', lastName: 'Ibrahim Karim', gender: 'M', classId: '3B', status: 'Réinscrit', matricule: 'M-2023-0056', assignmentStatus: 'Affecté' },
+        { id: 'std_5', firstName: 'Gomez', lastName: 'Marie-Chantal Enola', gender: 'F', classId: '3A', status: 'Inscrit', matricule: 'M-2026-0103', assignmentStatus: 'Non Affecté' }
+      ];
+      setStudentList(defaults);
+      localStorage.setItem('erp_student_records', JSON.stringify(defaults));
     }
-  }, []);
+  };
+
+  const updateStudentAssignmentStatus = (studentId: string, status: 'Affecté' | 'Non Affecté') => {
+    const updated = studentList.map(s => {
+      if (s.id === studentId) {
+        return { ...s, assignmentStatus: status };
+      }
+      return s;
+    });
+    setStudentList(updated);
+    localStorage.setItem('erp_student_records', JSON.stringify(updated));
+  };
 
   // Standard school fees rates per class
   const [feeSchedule, setFeeSchedule] = useState<TuitionFeeRate[]>(() => {
-    const saved = localStorage.getItem('erp_fees_schedule');
+    const saved = localStorage.getItem('erp_fees_schedule_v2');
     if (saved) return JSON.parse(saved);
     return [
-      { classId: '6A', className: 'Sixième A', amount: 180000 },
-      { classId: '6B', className: 'Sixième B', amount: 180000 },
-      { classId: '3A', className: 'Troisième A', amount: 250000 },
-      { classId: '3B', className: 'Troisième B', amount: 250000 }
+      { classId: '6A', className: 'Sixième A', amountNonAffecte: 180000, amountAffecte: 15000 },
+      { classId: '6B', className: 'Sixième B', amountNonAffecte: 180000, amountAffecte: 15000 },
+      { classId: '3A', className: 'Troisième A', amountNonAffecte: 250000, amountAffecte: 25000 },
+      { classId: '3B', className: 'Troisième B', amountNonAffecte: 250000, amountAffecte: 25000 }
     ];
   });
 
@@ -90,17 +128,16 @@ export default function FinancialModule({
   const [transactions, setTransactions] = useState<PaymentTransaction[]>(() => {
     const saved = localStorage.getItem('erp_billing_transactions');
     if (saved) return JSON.parse(saved);
-    // defaults
     return [
       { id: 'txn_1', studentId: 'std_1', studentName: 'YAO Koffi Anderson', classId: '6A', amount: 100000, paymentMethod: 'Wave Mobile', refNo: 'WAVE-TX-998812', recordedAt: '2026-06-02', receiptNo: 'R-2026-0032' },
-      { id: 'txn_2', studentId: 'std_2', studentName: 'DIOMANDÉ Aminata', classId: '6B', amount: 180000, paymentMethod: 'Cash (Caisse)', refNo: 'CAISSE-DIRECT-85', recordedAt: '2026-06-10', receiptNo: 'R-2026-0045' },
+      { id: 'txn_2', studentId: 'std_2', studentName: 'DIOMANDÉ Aminata', classId: '6B', amount: 15000, paymentMethod: 'Cash (Caisse)', refNo: 'CAISSE-DIRECT-85', recordedAt: '2026-06-10', receiptNo: 'R-2026-0045' },
       { id: 'txn_3', studentId: 'std_5', studentName: 'GOMEZ Marie-Chantal Enola', classId: '3A', amount: 125000, paymentMethod: 'Virement Bancaire', refNo: 'SIB-VIR-001295', recordedAt: '2026-06-14', receiptNo: 'R-2026-0062' }
     ];
   });
 
   // Save changes
   useEffect(() => {
-    localStorage.setItem('erp_fees_schedule', JSON.stringify(feeSchedule));
+    localStorage.setItem('erp_fees_schedule_v2', JSON.stringify(feeSchedule));
   }, [feeSchedule]);
 
   useEffect(() => {
@@ -120,7 +157,7 @@ export default function FinancialModule({
   // Payment register form state
   const [payForm, setPayForm] = useState({
     studentId: 'std_1',
-    amount: 50000,
+    amount: 15000,
     paymentMethod: 'Wave Mobile' as any,
     refNo: ''
   });
@@ -161,21 +198,31 @@ export default function FinancialModule({
 
     setPayForm(prev => ({
       ...prev,
-      amount: 50000,
+      amount: 15000,
       refNo: ''
     }));
   };
 
   const handleDeleteTxn = (id: string) => {
-    if (window.confirm("Êtes-vous sûr de vouloir de l'annulation comptable de cette transaction ?")) {
+    if (window.confirm("Êtes-vous sûr de vouloir l'annulation comptable de cette transaction ?")) {
       setTransactions(prev => prev.filter(t => t.id !== id));
     }
   };
 
   // Math helper logic to compute student billing state
   const getStudentBillingSheet = (studentId: string, classId: string) => {
+    const student = studentList.find(s => s.id === studentId);
+    const assignment = student?.assignmentStatus || 'Non Affecté';
+
     const matchedFeeSchedule = feeSchedule.find(f => f.classId === classId);
-    const baseFee = matchedFeeSchedule ? matchedFeeSchedule.amount : 200000;
+    let baseFee = 200000;
+    
+    if (matchedFeeSchedule) {
+      baseFee = assignment === 'Affecté' ? matchedFeeSchedule.amountAffecte : matchedFeeSchedule.amountNonAffecte;
+    } else {
+      // General fallbacks
+      baseFee = assignment === 'Affecté' ? 20000 : 200000;
+    }
     
     // Check discount and scholarship
     const discountPercent = studentDiscounts[studentId] || 0;
@@ -188,6 +235,7 @@ export default function FinancialModule({
 
     return {
       baseFee,
+      assignmentStatus: assignment,
       discountPercent,
       finalInvoiceDue,
       totalPaid,
@@ -215,7 +263,7 @@ export default function FinancialModule({
             <span>Gestion Financière & Recouvrement Scolarités</span>
           </h2>
           <p className="text-xs text-slate-500 font-medium">
-            Pilotez la caisse : configurez les tarifs d'écolage par niveau, appliquez les abattements d'excellence (bourses scolaire) et délivrez des reçus officiels sécurisés.
+            Pilotez la caisse : configurez les tarifs d'écolage par niveau (élèves affectés par l'état vs élèves privés non affectés), appliquez les bourses d'études et délivrez des reçus officiels.
           </p>
         </div>
 
@@ -246,7 +294,7 @@ export default function FinancialModule({
             }`}
           >
             <Percent className="h-4 w-4" />
-            Grille des Ecolages
+            Grille des Écolages
           </button>
         </div>
       </div>
@@ -271,8 +319,9 @@ export default function FinancialModule({
                 >
                   {studentList.map(s => {
                     const matchedClass = classes.find(c => c.id === s.classId)?.name || s.classId;
+                    const statusText = s.assignmentStatus === 'Affecté' ? 'Affecté État' : 'Privé';
                     return (
-                      <option key={s.id} value={s.id}>{s.lastName} {s.firstName} ({matchedClass})</option>
+                      <option key={s.id} value={s.id}>{s.lastName} {s.firstName} ({matchedClass} - {statusText})</option>
                     );
                   })}
                 </select>
@@ -284,7 +333,7 @@ export default function FinancialModule({
                   type="number" 
                   step="5000"
                   required
-                  placeholder="ex: 50000"
+                  placeholder="ex: 15000"
                   value={payForm.amount}
                   onChange={(e) => setPayForm(prev => ({ ...prev, amount: parseInt(e.target.value) || 0 }))}
                   className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black text-slate-800 focus:outline-none"
@@ -341,10 +390,11 @@ export default function FinancialModule({
                     <th className="p-2.5">Matricule</th>
                     <th className="p-2.5">Nom d'Élève</th>
                     <th className="p-2.5">Classe</th>
+                    <th className="p-2.5 w-32 text-center">Statut (État/Privé)</th>
                     <th className="p-2.5 text-right">Scolarité Estimée</th>
                     <th className="p-2.5 text-right text-emerald-800">Montant Versé</th>
                     <th className="p-2.5 text-right text-red-750">Reste À payer</th>
-                    <th className="p-2.5 text-center">Statut Facturation</th>
+                    <th className="p-2.5 text-center">Statut</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -354,8 +404,24 @@ export default function FinancialModule({
                     return (
                       <tr key={std.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition">
                         <td className="p-2.5 font-mono text-[#0b4998] font-bold">{std.matricule}</td>
-                        <td className="p-2.5 font-extrabold text-slate-850 uppercase">{std.lastName} {std.firstName}</td>
+                        <td className="p-2.5 font-extrabold text-slate-850 uppercase leading-none">
+                          {std.lastName} {std.firstName}
+                        </td>
                         <td className="p-2.5 font-bold text-slate-500">{std.classId}</td>
+                        <td className="p-2.5 text-center">
+                          <select
+                            value={std.assignmentStatus || 'Non Affecté'}
+                            onChange={(e) => updateStudentAssignmentStatus(std.id, e.target.value as any)}
+                            className={`p-1 rounded text-[10px] font-black border uppercase cursor-pointer ${
+                              std.assignmentStatus === 'Affecté'
+                                ? 'bg-indigo-50 border-indigo-200 text-indigo-750'
+                                : 'bg-slate-50 border-slate-200 text-slate-700'
+                            }`}
+                          >
+                            <option value="Non Affecté">Privé (Non affecté)</option>
+                            <option value="Affecté">État (Affecté)</option>
+                          </select>
+                        </td>
                         <td className="p-2.5 text-right font-semibold font-mono">
                           {bill.finalInvoiceDue.toLocaleString()} FCFA
                           {bill.discountPercent > 0 && (
@@ -408,7 +474,7 @@ export default function FinancialModule({
                   <div className="text-left">
                     <span className="text-[8px] font-bold text-slate-400 block uppercase font-mono">{txn.recordedAt} • Reçu {txn.receiptNo}</span>
                     <span className="text-xs font-black text-slate-800 block">{txn.studentName} ({txn.classId})</span>
-                    <span className="text-[10px] text-slate-450 font-bold block">{txn.paymentMethod}</span>
+                    <span className="text-[10px] text-slate-455 font-bold block">{txn.paymentMethod}</span>
                   </div>
 
                   <div className="flex items-center gap-2">
@@ -462,7 +528,7 @@ export default function FinancialModule({
                       <span className="text-[8px] font-bold text-slate-400 block uppercase">{schoolSubName}</span>
                     </div>
                     <div className="text-right">
-                      <span className="text-[10px] bg-slate-950 text-white px-2 py-0.5 rounded font-black font-mono">REÇU DE CRÉDIT</span>
+                      <span className="text-[10px] bg-slate-950 text-white px-2 py-0.5 rounded font-black font-mono">REÇU DE CAISSE</span>
                     </div>
                   </div>
 
@@ -473,31 +539,35 @@ export default function FinancialModule({
                       <span className="font-mono font-black text-slate-900">{selectedTxnObj.receiptNo}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-slate-450 font-bold uppercase">Date de versement :</span>
-                      <span className="font-mono font-bold text-slate-700">{selectedTxnObj.recordedAt}</span>
+                      <span className="text-slate-455 font-bold uppercase">Date de versement :</span>
+                      <span className="font-mono font-bold text-slate-750">{selectedTxnObj.recordedAt}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-slate-455 font-bold uppercase">Élève Référent :</span>
+                      <span className="text-slate-450 font-bold uppercase">Élève Référent :</span>
                       <span className="font-black text-slate-900 uppercase">{selectedTxnObj.studentName}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-450 font-bold uppercase">Classe :</span>
                       <span className="font-extrabold text-[#ee7b11]">{selectedTxnObj.classId}</span>
                     </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-450 font-bold uppercase">Statut scolarité :</span>
+                      <span className="font-extrabold text-indigo-700">{selectedTxnStudentBilling.assignmentStatus === 'Affecté' ? 'Élève Affecté (État)' : 'Élève Privé (Non affecté)'}</span>
+                    </div>
                   </div>
 
                   {/* Breakdown amount block */}
                   <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1 text-xs font-semibold">
                     <div className="flex justify-between border-b pb-1">
-                      <span>Catégorie d'écolage annuel :</span>
+                      <span>Dû annuel pour cette catégorie :</span>
                       <span>{selectedTxnStudentBilling.baseFee.toLocaleString()} FCFA</span>
                     </div>
                     <div className="flex justify-between text-emerald-800 font-extrabold">
                       <span>Montant Encaissé par ce reçu :</span>
                       <span>+{selectedTxnObj.amount.toLocaleString()} FCFA</span>
                     </div>
-                    <div className="flex justify-between text-slate-500 text-[10px]">
-                      <span>Règlement :</span>
+                    <div className="flex justify-between text-slate-550 text-[10px]">
+                      <span>Mode de règlement :</span>
                       <span>{selectedTxnObj.paymentMethod}</span>
                     </div>
                     <div className="flex justify-between text-[10px] text-slate-400 font-mono">
@@ -507,7 +577,7 @@ export default function FinancialModule({
                   </div>
 
                   {/* Financial update balance */}
-                  <div className="flex justify-between text-[11px] font-bold text-slate-705">
+                  <div className="flex justify-between text-[11px] font-bold text-slate-700">
                     <span>Reliquat restant dû :</span>
                     <span className="text-red-750 font-mono font-black">{selectedTxnStudentBilling.balanceRemaining.toLocaleString()} FCFA</span>
                   </div>
@@ -541,31 +611,55 @@ export default function FinancialModule({
           <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs space-y-4">
             <h3 className="text-sm font-black text-[#0b4998] uppercase">Barème Général des Frais d'Écolage</h3>
             <p className="text-xs text-slate-500 font-medium">
-              Configurez le tarif de scolarité annuel applicable par défaut pour chaque niveau scolaire.
+              Configurez le tarif de scolarité annuel applicable par défaut pour les élèves **non affectés (privés)** et les élèves **affectés (subventionnés par l'État)**.
             </p>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {feeSchedule.map((rate, index) => (
-                <div key={rate.classId} className="p-4 rounded-2xl bg-slate-50 border border-slate-150 flex items-center justify-between">
-                  <div>
-                    <span className="text-[9px] bg-slate-900 text-white px-2 py-0.5 rounded font-black font-mono block max-w-max mb-1">CLASSE {rate.classId}</span>
-                    <span className="text-xs font-black text-slate-900 block">{rate.className}</span>
-                    <span className="text-[10px] text-slate-450 font-bold block mt-0.5">Annuelle globale réglable</span>
+                <div key={rate.classId} className="p-4 rounded-2xl bg-slate-50 border border-slate-150 space-y-3">
+                  <div className="flex justify-between items-center border-b border-slate-200 pb-1.5">
+                    <span className="text-[9px] bg-slate-900 text-white px-2 py-0.5 rounded font-black font-mono">CLASSE {rate.classId}</span>
+                    <span className="text-xs font-black text-slate-900">{rate.className}</span>
                   </div>
 
-                  <div className="flex items-center gap-1">
-                    <input 
-                      type="number" 
-                      step="5000"
-                      value={rate.amount}
-                      onChange={(e) => {
-                        const copy = [...feeSchedule];
-                        copy[index].amount = parseInt(e.target.value) || 0;
-                        setFeeSchedule(copy);
-                      }}
-                      className="w-28 text-center bg-white border border-slate-200 p-1 rounded-lg text-xs font-black text-slate-800 focus:outline-none"
-                    />
-                    <span className="text-xs font-bold text-slate-450">FCFA</span>
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    {/* Private fees input */}
+                    <div className="space-y-1">
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase">Tarif Privé (Non affecté)</label>
+                      <div className="flex items-center gap-1">
+                        <input 
+                          type="number" 
+                          step="5000"
+                          value={rate.amountNonAffecte}
+                          onChange={(e) => {
+                            const copy = [...feeSchedule];
+                            copy[index].amountNonAffecte = parseInt(e.target.value) || 0;
+                            setFeeSchedule(copy);
+                          }}
+                          className="w-full text-center bg-white border border-slate-250 p-1.5 rounded-lg text-xs font-black text-slate-800 focus:outline-none"
+                        />
+                        <span className="text-[10px] font-bold text-slate-400">FCFA</span>
+                      </div>
+                    </div>
+
+                    {/* State-sponsored fees input */}
+                    <div className="space-y-1">
+                      <label className="block text-[10px] font-bold text-[#0b4998] uppercase">Tarif État (Affecté)</label>
+                      <div className="flex items-center gap-1">
+                        <input 
+                          type="number" 
+                          step="1000"
+                          value={rate.amountAffecte}
+                          onChange={(e) => {
+                            const copy = [...feeSchedule];
+                            copy[index].amountAffecte = parseInt(e.target.value) || 0;
+                            setFeeSchedule(copy);
+                          }}
+                          className="w-full text-center bg-white border border-indigo-250 p-1.5 rounded-lg text-xs font-black text-slate-800 focus:outline-none"
+                        />
+                        <span className="text-[10px] font-bold text-slate-400 font-mono">FCFA</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -574,7 +668,7 @@ export default function FinancialModule({
 
           {/* Scholar and Discounts setup registry */}
           <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs space-y-4">
-            <h3 className="text-sm font-black text-[#ee7b11] uppercase">Abattements Boursiers & Reductions Familles Actives</h3>
+            <h3 className="text-sm font-black text-[#ee7b11] uppercase">Abattements Boursiers & Réductions d'Excellence</h3>
             <p className="text-xs text-slate-500 font-medium leading-relaxed">
               Délivrez des réductions proportionnelles aux étudiants boursiers, orphelins ou appartenant à des fratries nombreuses d'enseignants.
             </p>
@@ -587,7 +681,9 @@ export default function FinancialModule({
                   <div key={std.id} className="p-3 bg-slate-50 border border-slate-150 rounded-2xl flex items-center justify-between">
                     <div>
                       <span className="text-xs font-black text-slate-900 uppercase block">{std.lastName} {std.firstName}</span>
-                      <span className="text-[10px] text-slate-455 font-bold block">Classe : {std.classId} • Matricule : {std.matricule}</span>
+                      <span className="text-[10px] text-slate-455 font-bold block">
+                        Classe : {std.classId} • Matricule : {std.matricule} • Statut : {std.assignmentStatus}
+                      </span>
                     </div>
 
                     <div className="flex items-center gap-2">

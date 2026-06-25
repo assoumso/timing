@@ -44,6 +44,7 @@ import FinancialModule from './components/FinancialModule';
 import PeripheralErpModules from './components/PeripheralErpModules';
 import ReportsCenter from './components/ReportsCenter';
 import { ToolsTab } from './components/ToolsTab';
+import { ExamsModule } from './components/ExamsModule';
 import { 
   Calendar, 
   Wrench,
@@ -1647,6 +1648,7 @@ export default function App() {
               items: [
                 { id: "erp_academic", name: "Syllabus & Progression", icon: <BookOpen className="h-4 w-4 text-[#0b4998]" />, desc: "Progression et cahier de textes" },
                 { id: "erp_evaluations", name: "Notes & Bulletins", icon: <Award className="h-4 w-4 text-[#ee7b11]" />, desc: "Saisie de notes et calcul des moyennes" },
+                { id: "erp_exams", name: "Examens Scolaires", icon: <Award className="h-4 w-4 text-purple-500" />, desc: "Examens blancs et examens nationaux" }
               ]
             },
             {
@@ -1911,6 +1913,16 @@ export default function App() {
                   schoolMotto={schoolMotto}
                   academicYear={academicYear}
                   schoolDirector={schoolDirector}
+                />
+              )}
+
+              {activeTab === 'erp_exams' && (
+                <ExamsModule
+                  classes={classes}
+                  schoolName={schoolName}
+                  schoolSubName={schoolSubName}
+                  schoolMotto={schoolMotto}
+                  academicYear={academicYear}
                 />
               )}
 
