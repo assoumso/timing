@@ -336,47 +336,47 @@ GRANT ALL ON TABLE barakat_planning TO service_role;`;
       {/* Stats row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Classes card */}
-        <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm transition hover:shadow-md flex items-center gap-4">
-          <div className="p-3.5 rounded-2xl bg-emerald-50 text-emerald-600">
+        <div className="bg-gradient-to-br from-emerald-50/65 via-emerald-50/15 to-white border border-emerald-150 rounded-2xl p-5 shadow-sm transition hover:shadow-md hover:border-emerald-400 flex items-center gap-4">
+          <div className="p-3.5 rounded-2xl bg-emerald-100 text-emerald-600">
             <GraduationCap className="h-6 w-6" />
           </div>
           <div>
-            <span className="text-xs text-slate-500 font-medium tracking-wide uppercase block">Classes</span>
-            <span className="text-2xl font-extrabold text-slate-900">{classes.length}</span>
+            <span className="text-xs text-slate-500 font-bold tracking-wide uppercase block">Classes</span>
+            <span className="text-2xl font-black text-slate-900">{classes.length}</span>
           </div>
         </div>
 
         {/* Teachers card */}
-        <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm transition hover:shadow-md flex items-center gap-4">
-          <div className="p-3.5 rounded-2xl bg-sky-50 text-sky-600">
+        <div className="bg-gradient-to-br from-sky-50/65 via-sky-50/15 to-white border border-sky-150 rounded-2xl p-5 shadow-sm transition hover:shadow-md hover:border-sky-400 flex items-center gap-4">
+          <div className="p-3.5 rounded-2xl bg-sky-100 text-sky-600">
             <Users className="h-6 w-6" />
           </div>
           <div>
-            <span className="text-xs text-slate-500 font-medium tracking-wide uppercase block">Professeurs</span>
-            <span className="text-2xl font-extrabold text-slate-900">{teachers.length}</span>
+            <span className="text-xs text-slate-500 font-bold tracking-wide uppercase block">Professeurs</span>
+            <span className="text-2xl font-black text-slate-900">{teachers.length}</span>
           </div>
         </div>
 
         {/* Rooms card */}
-        <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm transition hover:shadow-md flex items-center gap-4">
-          <div className="p-3.5 rounded-2xl bg-purple-50 text-purple-600">
+        <div className="bg-gradient-to-br from-purple-50/65 via-purple-50/15 to-white border border-purple-150 rounded-2xl p-5 shadow-sm transition hover:shadow-md hover:border-purple-400 flex items-center gap-4">
+          <div className="p-3.5 rounded-2xl bg-purple-100 text-purple-600">
             <School className="h-6 w-6" />
           </div>
           <div>
-            <span className="text-xs text-slate-500 font-medium tracking-wide uppercase block">Salles</span>
-            <span className="text-2xl font-extrabold text-slate-900">{rooms.length}</span>
+            <span className="text-xs text-slate-500 font-bold tracking-wide uppercase block">Salles</span>
+            <span className="text-2xl font-black text-slate-900">{rooms.length}</span>
           </div>
         </div>
 
         {/* Booked percentage card */}
-        <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm transition hover:shadow-md flex items-center gap-4">
-          <div className="p-3.5 rounded-2xl bg-blue-50 text-blue-600">
+        <div className="bg-gradient-to-br from-blue-50/65 via-blue-50/15 to-white border border-blue-150 rounded-2xl p-5 shadow-sm transition hover:shadow-md hover:border-blue-400 flex items-center gap-4">
+          <div className="p-3.5 rounded-2xl bg-blue-100 text-blue-600">
             <BookOpen className="h-6 w-6" />
           </div>
           <div className="flex-1 min-w-0">
-            <span className="text-xs text-slate-500 font-medium tracking-wide uppercase block">Attribution</span>
+            <span className="text-xs text-slate-500 font-bold tracking-wide uppercase block">Attribution</span>
             <div className="flex items-baseline gap-2">
-              <span className="text-xl font-extrabold text-slate-900">{scheduledCount} cours</span>
+              <span className="text-xl font-black text-slate-900">{scheduledCount} cours</span>
               <span className="text-xs font-semibold text-blue-700">({coveragePercent}%)</span>
             </div>
           </div>

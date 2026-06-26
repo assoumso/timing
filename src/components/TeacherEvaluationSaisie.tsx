@@ -11,7 +11,7 @@ import {
   AlertCircle,
   Clock
 } from 'lucide-react';
-import { ClassItem, SubjectItem, ScheduleCourse } from '../types';
+import { ClassItem, SubjectItem, ScheduleCourse, UserAccount } from '../types';
 
 interface StudentMark {
   id: string;
@@ -22,6 +22,7 @@ interface StudentMark {
   weight: number;
   score: number;
   recordedAt: string;
+  isValidatedByTeacher?: boolean;
 }
 
 interface TeacherEvaluationSaisieProps {
@@ -31,6 +32,7 @@ interface TeacherEvaluationSaisieProps {
   courses: ScheduleCourse[];
   marks: StudentMark[];
   setMarks: React.Dispatch<React.SetStateAction<StudentMark[]>>;
+  currentUser: UserAccount | null;
 }
 
 export default function TeacherEvaluationSaisie({
@@ -39,7 +41,8 @@ export default function TeacherEvaluationSaisie({
   subjects,
   courses,
   marks,
-  setMarks
+  setMarks,
+  currentUser
 }: TeacherEvaluationSaisieProps) {
   // Local list of students resolved from localStorage
   const [studentList, setStudentList] = useState<any[]>([]);
@@ -171,10 +174,20 @@ export default function TeacherEvaluationSaisie({
   }, [marks, activeAssignment]);
 
   const handleDeleteMark = (id: string) => {
+    const mark = marks.find(m => m.id === id);
+    if (mark?.isValidatedByTeacher && currentUser?.role !== 'super_admin' && currentUser?.role !== 'director') {
+      alert("Cette note a été validée et approuvée. Seul le Directeur ou l'informaticien peut la modifier ou la supprimer.");
+      return;
+    }
     if (window.confirm("Voulez-vous supprimer définitivement cette note ?")) {
       setMarks(prev => prev.filter(m => m.id !== id));
     }
   };
+
+  const canEnterGrades = 
+    currentUser?.role === 'super_admin' || 
+    currentUser?.role === 'director' || 
+    currentUser?.allowedTabs?.includes('saisie_moyennes');
 
   return (
     <div className="bg-white border border-slate-200 rounded-3xl p-5 md:p-6 shadow-sm space-y-6">
@@ -192,7 +205,7 @@ export default function TeacherEvaluationSaisie({
         </div>
 
         {/* Assignment selector dropdown */}
-        {teacherAssignments.length > 0 ? (
+        {canEnterGrades && teacherAssignments.length > 0 ? (
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold text-slate-400">Classe assignée :</span>
             <select
@@ -211,14 +224,23 @@ export default function TeacherEvaluationSaisie({
               })}
             </select>
           </div>
-        ) : (
+        ) : canEnterGrades ? (
           <div className="text-xs font-extrabold text-rose-600 bg-rose-50 px-3 py-1.5 rounded-xl border border-rose-150">
             ⚠️ Aucun cours assigné sur la grille
           </div>
-        )}
+        ) : null}
       </div>
 
-      {activeAssignment ? (
+      {!canEnterGrades ? (
+        <div className="bg-amber-50/70 border border-amber-200 text-amber-800 p-6 rounded-2xl flex gap-3 text-xs leading-relaxed max-w-3xl">
+          <AlertCircle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+          <div>
+            <span className="font-extrabold text-amber-900 block mb-1">Saisie des Moyennes Verrouillée</span>
+            Votre compte enseignant n'a pas reçu l'autorisation spécifique pour la saisie ou la modification des moyennes par la direction. 
+            Veuillez contacter le <strong>Directeur</strong> ou le <strong>Correspondant Fichier (Administrateur)</strong> pour activer ce droit dans la gestion des rôles.
+          </div>
+        </div>
+      ) : activeAssignment ? (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           
           {/* Left panel: Batch Form */}
@@ -358,10 +380,32 @@ export default function TeacherEvaluationSaisie({
 
             {/* List of past recorded evaluations */}
             <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
-              <h4 className="text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1">
-                <Clock className="h-3.5 w-3.5" />
-                <span>Notes déjà saisies ({pastMarks.length})</span>
-              </h4>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/60 pb-2">
+                <h4 className="text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1">
+                  <Clock className="h-3.5 w-3.5" />
+                  <span>Notes déjà saisies ({pastMarks.length})</span>
+                </h4>
+                
+                {pastMarks.length > 0 && pastMarks.some(m => !m.isValidatedByTeacher) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (window.confirm("Valider et approuver définitivement toutes les notes saisies pour cette classe ? Une fois validées, vous ne pourrez plus les modifier ni les supprimer.")) {
+                        setMarks(prev => prev.map(m => {
+                          if (m.classId === activeAssignment.classId && m.subjectId === activeAssignment.subjectId) {
+                            return { ...m, isValidatedByTeacher: true };
+                          }
+                          return m;
+                        }));
+                      }
+                    }}
+                    className="cursor-pointer px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[9px] font-black uppercase tracking-wider transition flex items-center justify-center gap-1 shadow-xs border border-emerald-500"
+                  >
+                    <Check className="h-3 w-3 text-emerald-100" />
+                    <span>🔒 Valider & Figer</span>
+                  </button>
+                )}
+              </div>
 
               <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
                 {pastMarks.length > 0 ? (
@@ -375,17 +419,41 @@ export default function TeacherEvaluationSaisie({
                             {m.recordedAt} • {m.examName} (Coef {m.weight})
                           </span>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
+                          {m.isValidatedByTeacher && (
+                            <span className="text-[8px] font-extrabold text-slate-500 bg-slate-100 border border-slate-200 px-1 py-0.5 rounded" title="Moyenne validée et approuvée">
+                              🔒 Fígé
+                            </span>
+                          )}
                           <span className="text-xs font-black text-[#0b4998] font-mono whitespace-nowrap bg-slate-50 border border-slate-150 px-2 py-0.5 rounded">
                             {m.score.toFixed(1)} / 20
                           </span>
-                          <button
-                            onClick={() => handleDeleteMark(m.id)}
-                            className="opacity-0 group-hover:opacity-100 cursor-pointer p-0.5 text-slate-300 hover:text-red-600 rounded transition"
-                            title="Supprimer la note"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </button>
+
+                          {/* Unlock override for Director / Admin */}
+                          {m.isValidatedByTeacher && (currentUser?.role === 'super_admin' || currentUser?.role === 'director') && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (window.confirm("Déverrouiller cette note pour permettre à l'enseignant de la corriger ?")) {
+                                  setMarks(prev => prev.map(x => x.id === m.id ? { ...x, isValidatedByTeacher: false } : x));
+                                }
+                              }}
+                              className="text-[8.5px] font-extrabold text-[#0b4998] hover:text-[#ee7b11] whitespace-nowrap bg-slate-50 border border-slate-150 px-1 py-0.5 rounded hover:bg-slate-100"
+                              title="Déverrouiller la note"
+                            >
+                              🔓 Déverr.
+                            </button>
+                          )}
+
+                          {(!m.isValidatedByTeacher || currentUser?.role === 'super_admin' || currentUser?.role === 'director') && (
+                            <button
+                              onClick={() => handleDeleteMark(m.id)}
+                              className="opacity-0 group-hover:opacity-100 cursor-pointer p-0.5 text-slate-350 hover:text-red-650 rounded transition"
+                              title="Supprimer la note"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          )}
                         </div>
                       </div>
                     );

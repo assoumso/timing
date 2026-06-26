@@ -151,6 +151,18 @@ export default function App() {
     localStorage.setItem('barakat_user_accounts', JSON.stringify(userAccounts));
   }, [userAccounts]);
 
+  // Automatically sync currentUser with changes in userAccounts (e.g. permission updates)
+  useEffect(() => {
+    if (currentUser) {
+      const updatedUser = userAccounts.find(u => u.id === currentUser.id);
+      if (updatedUser) {
+        if (JSON.stringify(updatedUser) !== JSON.stringify(currentUser)) {
+          setCurrentUser(updatedUser);
+        }
+      }
+    }
+  }, [userAccounts, currentUser]);
+
   // Sync userRole and session storage when currentUser changes
   useEffect(() => {
     if (currentUser) {
@@ -2029,6 +2041,7 @@ export default function App() {
                   schoolDirector={schoolDirector}
                   marks={marks}
                   setMarks={setMarks}
+                  currentUser={currentUser}
                 />
               )}
 
@@ -3538,6 +3551,7 @@ export default function App() {
                 courses={courses}
                 marks={marks}
                 setMarks={setMarks}
+                currentUser={currentUser}
               />
             </div>
           )}

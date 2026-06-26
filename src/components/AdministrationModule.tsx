@@ -844,6 +844,7 @@ export default function AdministrationModule({
                                 { id: 'erp_attendance', name: '🛡️ Présences' },
                                 { id: 'erp_financial', name: '💼 Comptabilité' },
                                 { id: 'erp_evaluations', name: '🏆 Notes & Bulletins' },
+                                { id: 'saisie_moyennes', name: '✍️ Saisie des Moyennes (Autorisé)' },
                                 { id: 'erp_exams', name: '📝 Examens Scolaires' },
                                 { id: 'dashboard', name: '📅 Emplois du temps' },
                                 { id: 'portal_accountant', name: '🏦 Portail Comptable' },
@@ -869,7 +870,7 @@ export default function AdministrationModule({
                                             if (acc.id === account.id) {
                                               const currentTabs = acc.allowedTabs || [
                                                 'school_erp_dashboard', 'erp_students', 'erp_teachers', 'erp_attendance', 
-                                                'erp_financial', 'erp_evaluations', 'erp_exams', 'dashboard',
+                                                'erp_financial', 'erp_evaluations', 'saisie_moyennes', 'erp_exams', 'dashboard',
                                                 'portal_accountant', 'portal_supervisor', 'portal_teacher', 'portal_parent', 
                                                 'portal_student', 'erp_admin'
                                               ];

@@ -13,7 +13,7 @@ import {
   Layers,
   FileText 
 } from 'lucide-react';
-import { ClassItem, SubjectItem, TeacherItem } from '../types';
+import { ClassItem, SubjectItem, TeacherItem, UserAccount } from '../types';
 
 interface EvaluationModuleProps {
   classes: ClassItem[];
@@ -26,6 +26,7 @@ interface EvaluationModuleProps {
   schoolDirector: string;
   marks: StudentMark[];
   setMarks: React.Dispatch<React.SetStateAction<StudentMark[]>>;
+  currentUser: UserAccount | null;
 }
 
 interface StudentMark {
@@ -37,6 +38,7 @@ interface StudentMark {
   weight: number; // coefficient of this exam
   score: number; // 0 to 20
   recordedAt: string;
+  isValidatedByTeacher?: boolean;
 }
 
 export default function EvaluationModule({
@@ -49,7 +51,8 @@ export default function EvaluationModule({
   academicYear,
   schoolDirector,
   marks,
-  setMarks
+  setMarks,
+  currentUser
 }: EvaluationModuleProps) {
   
   // Resolve students list dynamically from localStorage
@@ -97,12 +100,21 @@ export default function EvaluationModule({
     score: 12.0
   });
 
-  // Dynamic filter lists
+  const isAuthorizedToEdit = 
+    currentUser?.role === 'super_admin' || 
+    currentUser?.role === 'director' || 
+    currentUser?.allowedTabs?.includes('saisie_moyennes');
+
   const currentClassStudents = studentList.filter(s => s.classId === bulletinClassId);
 
   // Submit and log marks
   const handleRecordMark = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isAuthorizedToEdit) {
+      alert("Accès refusé: Seuls le Directeur, le Correspondant Fichier (Informaticien) ou les utilisateurs autorisés peuvent saisir des notes.");
+      return;
+    }
+
     const resolvedStudent = studentList.find(s => s.id === inputForm.studentId);
     if (!resolvedStudent) {
       alert("Élève invalide ou introuvable !");
@@ -136,6 +148,10 @@ export default function EvaluationModule({
   };
 
   const handleDeleteMark = (id: string) => {
+    if (!isAuthorizedToEdit) {
+      alert("Accès refusé: Seuls le Directeur, le Correspondant Fichier (Informaticien) ou les utilisateurs autorisés peuvent supprimer des notes.");
+      return;
+    }
     if (window.confirm("Voulez-vous supprimer définitivement cette note ?")) {
       setMarks(prev => prev.filter(m => m.id !== id));
     }
@@ -292,88 +308,98 @@ export default function EvaluationModule({
               <span>Saisir une Note d'Évaluation</span>
             </h3>
 
-            <form onSubmit={handleRecordMark} className="space-y-3">
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-500 uppercase">Sélectionner l'Élève destinataire</label>
-                <select 
-                  value={inputForm.studentId}
-                  onChange={(e) => setInputForm(prev => ({ ...prev, studentId: e.target.value }))}
-                  className="w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none"
-                >
-                  {studentList.map(s => {
-                    const matchedClass = classes.find(c => c.id === s.classId)?.name || s.classId;
-                    return (
-                      <option key={s.id} value={s.id}>{s.lastName} {s.firstName} ({matchedClass})</option>
-                    );
-                  })}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase">Matière</label>
-                  <select 
-                    value={inputForm.subjectId}
-                    onChange={(e) => setInputForm(prev => ({ ...prev, subjectId: e.target.value }))}
-                    className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none"
-                  >
-                    {subjects.map(s => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase">Coefficient / Poids</label>
-                  <select 
-                    value={inputForm.weight}
-                    onChange={(e) => setInputForm(prev => ({ ...prev, weight: parseInt(e.target.value) }))}
-                    className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none"
-                  >
-                    <option value="1">Coefficient 1</option>
-                    <option value="2">Coefficient 2</option>
-                    <option value="3">Coefficient 3</option>
-                    <option value="5">Coefficient 5</option>
-                  </select>
+            {!isAuthorizedToEdit ? (
+              <div className="bg-amber-50/80 border border-amber-200 text-amber-800 p-5 rounded-2xl flex gap-3 text-xs leading-relaxed">
+                <span className="text-lg mt-0.5 shrink-0">🔒</span>
+                <div>
+                  <span className="font-extrabold text-amber-900 block mb-1">Accès Restreint</span>
+                  Vous ne disposez pas des permissions requises pour enregistrer de nouvelles notes ou modifier le registre. Seuls le Directeur, le Correspondant Fichier ou les utilisateurs autorisés peuvent le faire.
                 </div>
               </div>
+            ) : (
+              <form onSubmit={handleRecordMark} className="space-y-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Sélectionner l'Élève destinataire</label>
+                  <select 
+                    value={inputForm.studentId}
+                    onChange={(e) => setInputForm(prev => ({ ...prev, studentId: e.target.value }))}
+                    className="w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none"
+                  >
+                    {studentList.map(s => {
+                      const matchedClass = classes.find(c => c.id === s.classId)?.name || s.classId;
+                      return (
+                        <option key={s.id} value={s.id}>{s.lastName} {s.firstName} ({matchedClass})</option>
+                      );
+                    })}
+                  </select>
+                </div>
 
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-500 uppercase">Type / Intitulé de l'Évaluation</label>
-                <input 
-                  type="text" 
-                  required
-                  placeholder="Ex: Devoir de Synthèse Trimestre 3" 
-                  value={inputForm.examName}
-                  onChange={(e) => setInputForm(prev => ({ ...prev, examName: e.target.value }))}
-                  className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:bg-white"
-                />
-              </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">Matière</label>
+                    <select 
+                      value={inputForm.subjectId}
+                      onChange={(e) => setInputForm(prev => ({ ...prev, subjectId: e.target.value }))}
+                      className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none"
+                    >
+                      {subjects.map(s => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">Coefficient / Poids</label>
+                    <select 
+                      value={inputForm.weight}
+                      onChange={(e) => setInputForm(prev => ({ ...prev, weight: parseInt(e.target.value) }))}
+                      className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none"
+                    >
+                      <option value="1">Coefficient 1</option>
+                      <option value="2">Coefficient 2</option>
+                      <option value="3">Coefficient 3</option>
+                      <option value="5">Coefficient 5</option>
+                    </select>
+                  </div>
+                </div>
 
-              <div className="space-y-1 pb-2">
-                <label className="text-[10px] font-bold text-[#ee7b11] uppercase block">Note de l'élève (Sur 20.0)</label>
-                <div className="flex items-center gap-2">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Type / Intitulé de l'Évaluation</label>
                   <input 
-                    type="number" 
-                    step="0.25"
-                    min="0"
-                    max="20"
+                    type="text" 
                     required
-                    value={inputForm.score}
-                    onChange={(e) => setInputForm(prev => ({ ...prev, score: parseFloat(e.target.value) || 0 }))}
-                    className="w-full px-4 py-2 bg-slate-50 border border-[#f3aa1c] rounded-xl text-lg font-black text-[#0b4998] focus:bg-white focus:outline-none"
+                    placeholder="Ex: Devoir de Synthèse Trimestre 3" 
+                    value={inputForm.examName}
+                    onChange={(e) => setInputForm(prev => ({ ...prev, examName: e.target.value }))}
+                    className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:bg-white"
                   />
-                  <span className="text-sm font-black text-slate-400 text-right">/ 20</span>
                 </div>
-              </div>
 
-              <button 
-                type="submit"
-                className="cursor-pointer w-full py-2 bg-[#0b4998] hover:bg-[#093d80] text-white font-extrabold text-xs rounded-xl flex items-center justify-center gap-1.5 transition shadow-sm pt-2"
-              >
-                <Plus className="h-4 w-4" />
-                Soumettre au Registre Électronique
-              </button>
-            </form>
+                <div className="space-y-1 pb-2">
+                  <label className="text-[10px] font-bold text-[#ee7b11] uppercase block">Note de l'élève (Sur 20.0)</label>
+                  <div className="flex items-center gap-2">
+                    <input 
+                      type="number" 
+                      step="0.25"
+                      min="0"
+                      max="20"
+                      required
+                      value={inputForm.score}
+                      onChange={(e) => setInputForm(prev => ({ ...prev, score: parseFloat(e.target.value) || 0 }))}
+                      className="w-full px-4 py-2 bg-slate-50 border border-[#f3aa1c] rounded-xl text-lg font-black text-[#0b4998] focus:bg-white focus:outline-none"
+                    />
+                    <span className="text-sm font-black text-slate-400 text-right">/ 20</span>
+                  </div>
+                </div>
+
+                <button 
+                  type="submit"
+                  className="cursor-pointer w-full py-2 bg-[#0b4998] hover:bg-[#093d80] text-white font-extrabold text-xs rounded-xl flex items-center justify-center gap-1.5 transition shadow-sm pt-2"
+                >
+                  <Plus className="h-4 w-4" />
+                  Soumettre au Registre Électronique
+                </button>
+              </form>
+            )}
           </div>
 
           {/* List recent marks table */}
@@ -399,12 +425,14 @@ export default function EvaluationModule({
                       <span className="text-sm font-black text-[#0b4998] bg-white border border-slate-200 px-3 py-1 rounded-xl shadow-inner font-mono">
                         {m.score.toFixed(1)} / 20
                       </span>
-                      <button 
-                        onClick={() => handleDeleteMark(m.id)}
-                        className="opacity-0 group-hover:opacity-100 cursor-pointer p-1 text-slate-350 hover:text-red-500 rounded-md transition"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+                      {isAuthorizedToEdit && (
+                        <button 
+                          onClick={() => handleDeleteMark(m.id)}
+                          className="opacity-0 group-hover:opacity-100 cursor-pointer p-1 text-slate-350 hover:text-red-500 rounded-md transition"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 );

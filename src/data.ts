@@ -1,3 +1,5 @@
+import { SubjectItem, ClassItem, RoomItem, TeacherItem, ScheduleCourse, UserAccount } from './types';
+
 export const INITIAL_SUBJECTS: SubjectItem[] = [
   { id: 'math', name: 'Mathématiques', color: 'blue', coefficient: 4 },
   { id: 'fra', name: 'Français', color: 'rose', coefficient: 4 },

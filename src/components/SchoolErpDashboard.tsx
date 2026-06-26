@@ -123,10 +123,10 @@ export default function SchoolErpDashboard({
         {/* KPI: Global Daily Attendance */}
         <div 
           onClick={() => onNavigateToModule('attendance')}
-          className="bg-white border border-slate-200/80 p-5 rounded-3xl hover:border-[#f3aa1c]/40 hover:shadow-md transition duration-200 group cursor-pointer flex items-start justify-between"
+          className="bg-gradient-to-br from-emerald-50/65 via-emerald-50/15 to-white border border-emerald-150 p-5 rounded-3xl hover:border-emerald-400 hover:shadow-md transition duration-200 group cursor-pointer flex items-start justify-between"
         >
           <div className="space-y-3">
-            <span className="text-slate-400 font-bold text-xs uppercase tracking-wider">Présence Journalière</span>
+            <span className="text-emerald-850 font-extrabold text-[10.5px] uppercase tracking-wider">Présence Journalière</span>
             <div className="flex items-baseline gap-1.5">
               <span className="text-3xl font-black text-slate-900">{attendanceRate}</span>
               <span className="text-xs text-emerald-650 font-bold">Excellent</span>
@@ -137,7 +137,7 @@ export default function SchoolErpDashboard({
               <span>Retards: 2</span>
             </div>
           </div>
-          <div className="p-3 rounded-2xl bg-emerald-50 text-emerald-650 group-hover:bg-[#0b4998] group-hover:text-white transition-colors duration-200">
+          <div className="p-3 rounded-2xl bg-emerald-100 text-emerald-650 group-hover:bg-[#0b4998] group-hover:text-white transition-colors duration-200">
             <Activity className="h-5 w-5" />
           </div>
         </div>
@@ -145,13 +145,13 @@ export default function SchoolErpDashboard({
         {/* KPI: Existing Schedule Engine status */}
         <div 
           onClick={() => onNavigateToModule('schedule_module')}
-          className="bg-white border border-slate-200/80 p-5 rounded-3xl hover:border-[#f3aa1c]/40 hover:shadow-md transition duration-200 group cursor-pointer flex items-start justify-between"
+          className="bg-gradient-to-br from-purple-50/65 via-purple-50/15 to-white border border-purple-150 p-5 rounded-3xl hover:border-purple-400 hover:shadow-md transition duration-200 group cursor-pointer flex items-start justify-between"
         >
           <div className="space-y-3">
-            <span className="text-slate-400 font-bold text-xs uppercase tracking-wider">Planning & Cours</span>
+            <span className="text-purple-850 font-extrabold text-[10.5px] uppercase tracking-wider">Planning & Cours</span>
             <div className="flex items-baseline gap-1.5">
               <span className="text-3xl font-black text-slate-900">{courses.length}</span>
-              <span className="text-xs text-slate-500 font-semibold">Crén. planifiés</span>
+              <span className="text-xs text-slate-550 font-semibold">Crén. planifiés</span>
             </div>
             <div className="text-[10.5px] text-slate-500 font-semibold flex items-center gap-1">
               <span>Enseignants occupés: {teachers.length}</span>
@@ -159,7 +159,7 @@ export default function SchoolErpDashboard({
               <span>Salles libres</span>
             </div>
           </div>
-          <div className="p-3 rounded-2xl bg-[#ee7b11]/10 text-[#ee7b11] group-hover:bg-[#0b4998] group-hover:text-white transition-colors duration-200">
+          <div className="p-3 rounded-2xl bg-purple-100 text-purple-600 group-hover:bg-[#0b4998] group-hover:text-white transition-colors duration-200">
             <Calendar className="h-5 w-5" />
           </div>
         </div>
