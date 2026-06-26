@@ -18,7 +18,9 @@ import {
   Calendar,
   ArrowRight,
   Archive,
-  GraduationCap
+  GraduationCap,
+  FileSpreadsheet,
+  Scissors
 } from 'lucide-react';
 
 interface ClassItem {
@@ -63,7 +65,7 @@ interface ToolsTabProps {
 }
 
 export function ToolsTab({ classes, schoolName, academicYear, setAcademicYear }: ToolsTabProps) {
-  const [activeSubTab, setActiveSubTab] = useState<'individual_photo' | 'bulk_photo' | 'bulk_class_transfer' | 'year_transition' | 'system_db'>('individual_photo');
+  const [activeSubTab, setActiveSubTab] = useState<'individual_photo' | 'bulk_photo' | 'bulk_class_transfer' | 'import_excel' | 'year_transition' | 'system_db'>('individual_photo');
   
   // Student database loaded from localStorage
   const [students, setStudents] = useState<StudentRecord[]>([]);
@@ -236,7 +238,142 @@ export function ToolsTab({ classes, schoolName, academicYear, setAcademicYear }:
   };
 
   // ==========================================
-  // TAB 4: ACADEMIC YEAR CLOSURE & INITIALIZATION
+  // TAB 4: IMPORT STUDENTS FROM EXCEL / CSV
+  // ==========================================
+  const [pasteData, setPasteData] = useState('');
+  const [importReport, setImportReport] = useState<{
+    successCount: number;
+    errors: string[];
+  } | null>(null);
+
+  const handleDownloadTemplate = () => {
+    // Semicolon-separated CSV template for French Excel compatibility
+    const headers = "Nom;Prenoms;Genre;DateNaissance;Classe;NomTuteur;TelephoneTuteur;Statut;MatriculeNational;Ville";
+    const example1 = "YAO;Koffi Anderson;M;2014-04-12;6A;Koffi Blaise;+225 07 41 85 96 03;Inscrit;CI-0125-9831K;Abidjan";
+    const example2 = "DIOMANDE;Aminata;F;2013-08-19;6B;Diomande Lancine;+225 05 52 41 12 74;Reinscrit;CI-0124-7744D;Yamoussoukro";
+    
+    const csvContent = "\uFEFF" + [headers, example1, example2].join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = "modele_importation_eleves.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+    showStatus('success', 'Modèle CSV téléchargé. Ouvrez-le dans Excel pour le remplir.');
+  };
+
+  const handleImportCSVFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      processRawData(text);
+    };
+    reader.readAsText(file);
+  };
+
+  const handleProcessPasteData = () => {
+    if (!pasteData.trim()) {
+      showStatus('error', 'Veuillez coller des lignes Excel d’abord.');
+      return;
+    }
+    processRawData(pasteData);
+  };
+
+  const processRawData = (text: string) => {
+    const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
+    if (lines.length <= 1) {
+      showStatus('error', 'Le fichier ou texte collé ne contient pas de lignes de données.');
+      return;
+    }
+
+    // Determine separator: tab or semicolon or comma
+    const header = lines[0];
+    let sep = ';';
+    if (header.includes('\t')) sep = '\t';
+    else if (header.includes(';')) sep = ';';
+    else if (header.includes(',')) sep = ',';
+
+    const parsedStudents: StudentRecord[] = [];
+    const errors: string[] = [];
+    let successCount = 0;
+
+    // Start parsing from line index 1 (skip header)
+    for (let i = 1; i < lines.length; i++) {
+      const columns = lines[i].split(sep).map(col => col.trim().replace(/^["']|["']$/g, ''));
+      if (columns.length < 5) {
+        errors.push(`Ligne ${i + 1} ignorée: Nombre de colonnes insuffisant (${columns.length} colonnes détectées, attendu au moins 5).`);
+        continue;
+      }
+
+      const [lastName, firstName, genderStr, birthDate, classInput, tutorName, tutorPhone, statusInput, matriculeNat, city] = columns;
+
+      if (!lastName || !firstName) {
+        errors.push(`Ligne ${i + 1} ignorée: Le Nom et le Prénom sont obligatoires.`);
+        continue;
+      }
+
+      // Check class
+      const matchedClass = classes.find(c => c.id.toLowerCase() === classInput.toLowerCase() || c.name.toLowerCase() === classInput.toLowerCase());
+      if (!matchedClass) {
+        errors.push(`Ligne ${i + 1} ignorée: La classe "${classInput}" n'existe pas dans le système.`);
+        continue;
+      }
+
+      const gender = (genderStr && genderStr.toUpperCase().startsWith('F')) ? 'F' : 'M';
+      
+      const cleanStatus = (statusInput && statusInput.toLowerCase().includes('rein')) ? 'Réinscrit' : 'Inscrit';
+
+      // Generate a unique matricule
+      const studentId = 'std_imp_' + Date.now() + '_' + Math.floor(100 + Math.random() * 900);
+      const generatedMatricule = 'M-' + academicYear.split('-')[0] + '-' + Math.floor(10000 + Math.random() * 90000);
+
+      parsedStudents.push({
+        id: studentId,
+        lastName,
+        firstName,
+        gender,
+        birthDate: birthDate || '2015-01-01',
+        classId: matchedClass.id,
+        tutorName: tutorName || 'Parent d’élève',
+        tutorPhone: tutorPhone || '+225 01 02 03 04 05',
+        status: cleanStatus,
+        matricule: generatedMatricule,
+        matriculeNat: matriculeNat || '',
+        city: city || 'Abidjan',
+        photo: ''
+      });
+      successCount++;
+    }
+
+    if (parsedStudents.length > 0) {
+      // Append to existing students or overwrite if base is empty
+      const isOverwrite = window.confirm(`Voulez-vous fusionner ces ${parsedStudents.length} nouveaux élèves avec la base existante (${students.length} élèves) ?\n\n[OK] = Fusionner les deux listes\n[Annuler] = Remplacer et écraser la base existante`);
+      
+      let updatedStudentsList: StudentRecord[] = [];
+      if (isOverwrite) {
+        updatedStudentsList = [...students, ...parsedStudents];
+      } else {
+        updatedStudentsList = parsedStudents;
+      }
+
+      setStudents(updatedStudentsList);
+      localStorage.setItem('erp_student_records', JSON.stringify(updatedStudentsList));
+      showStatus('success', `${parsedStudents.length} élèves importés avec succès !`);
+    }
+
+    setImportReport({
+      successCount,
+      errors
+    });
+    setPasteData('');
+  };
+
+  // ==========================================
+  // TAB 5: ACADEMIC YEAR CLOSURE & INITIALIZATION
   // ==========================================
   
   // Year setup states
@@ -423,7 +560,7 @@ export function ToolsTab({ classes, schoolName, academicYear, setAcademicYear }:
   };
 
   // ==========================================
-  // TAB 5: SYSTEM UTILITIES & DATABASE (JSON)
+  // TAB 6: SYSTEM UTILITIES & DATABASE (JSON)
   // ==========================================
   const handleExportData = () => {
     const backup: Record<string, string | null> = {};
@@ -529,7 +666,7 @@ export function ToolsTab({ classes, schoolName, academicYear, setAcademicYear }:
           <h1 className="text-2xl font-black uppercase tracking-tight">
             Menu Administratif & Utilitaires
           </h1>
-          <p className="text-xs text-slate-350 max-w-xl font-medium">
+          <p className="text-xs text-slate-355 max-w-xl font-medium">
             Affectez des photos aux dossiers d'élèves, organisez les passages en masse de classes, clôturez vos trimestres ou préparez le démarrage de la nouvelle année.
           </p>
         </div>
@@ -547,7 +684,7 @@ export function ToolsTab({ classes, schoolName, academicYear, setAcademicYear }:
           className={`cursor-pointer px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 border ${
             activeSubTab === 'individual_photo' 
               ? 'bg-slate-900 text-white border-slate-950 shadow-xs' 
-              : 'bg-white text-slate-650 hover:bg-slate-50 border-slate-200'
+              : 'bg-white text-slate-655 hover:bg-slate-50 border-slate-200'
           }`}
         >
           <Camera className="h-4 w-4" />
@@ -559,7 +696,7 @@ export function ToolsTab({ classes, schoolName, academicYear, setAcademicYear }:
           className={`cursor-pointer px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 border ${
             activeSubTab === 'bulk_photo' 
               ? 'bg-slate-900 text-white border-slate-950 shadow-xs' 
-              : 'bg-white text-slate-650 hover:bg-slate-50 border-slate-200'
+              : 'bg-white text-slate-655 hover:bg-slate-50 border-slate-200'
           }`}
         >
           <Users className="h-4 w-4" />
@@ -571,7 +708,7 @@ export function ToolsTab({ classes, schoolName, academicYear, setAcademicYear }:
           className={`cursor-pointer px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 border ${
             activeSubTab === 'bulk_class_transfer' 
               ? 'bg-slate-900 text-white border-slate-950 shadow-xs' 
-              : 'bg-white text-slate-650 hover:bg-slate-50 border-slate-200'
+              : 'bg-white text-slate-655 hover:bg-slate-50 border-slate-200'
           }`}
         >
           <FolderSync className="h-4 w-4" />
@@ -579,11 +716,23 @@ export function ToolsTab({ classes, schoolName, academicYear, setAcademicYear }:
         </button>
 
         <button
+          onClick={() => setActiveSubTab('import_excel')}
+          className={`cursor-pointer px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 border ${
+            activeSubTab === 'import_excel' 
+              ? 'bg-slate-900 text-white border-slate-950 shadow-xs' 
+              : 'bg-white text-slate-655 hover:bg-slate-50 border-slate-200'
+          }`}
+        >
+          <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
+          <span>Importation Excel / CSV</span>
+        </button>
+
+        <button
           onClick={() => setActiveSubTab('year_transition')}
           className={`cursor-pointer px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 border ${
             activeSubTab === 'year_transition' 
               ? 'bg-slate-900 text-white border-slate-950 shadow-xs' 
-              : 'bg-white text-slate-650 hover:bg-slate-50 border-slate-250'
+              : 'bg-white text-slate-655 hover:bg-slate-50 border-slate-200'
           }`}
         >
           <Archive className="h-4 w-4 text-[#ee7b11]" />
@@ -595,7 +744,7 @@ export function ToolsTab({ classes, schoolName, academicYear, setAcademicYear }:
           className={`cursor-pointer px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 border ${
             activeSubTab === 'system_db' 
               ? 'bg-slate-900 text-white border-slate-950 shadow-xs' 
-              : 'bg-white text-slate-650 hover:bg-slate-50 border-slate-200'
+              : 'bg-white text-slate-655 hover:bg-slate-50 border-slate-200'
           }`}
         >
           <Database className="h-4 w-4" />
@@ -817,7 +966,7 @@ export function ToolsTab({ classes, schoolName, academicYear, setAcademicYear }:
                         <td className="p-3">
                           <div className="flex items-center justify-center gap-2">
                             <div className="relative">
-                              <button className="cursor-pointer h-7 px-3 bg-slate-900 hover:bg-slate-850 text-white text-[10.5px] font-bold rounded-lg transition flex items-center gap-1">
+                              <button className="cursor-pointer h-7 px-3 bg-slate-900 hover:bg-slate-855 text-white text-[10.5px] font-bold rounded-lg transition flex items-center gap-1">
                                 <Upload className="h-3 w-3 text-emerald-400" />
                                 <span>Choisir Photo</span>
                               </button>
@@ -971,7 +1120,127 @@ export function ToolsTab({ classes, schoolName, academicYear, setAcademicYear }:
           </div>
         )}
 
-        {/* TAB 4: YEAR TRANSITION (CLÔTURE & NOUVELLE ANNÉE) */}
+        {/* TAB 4: IMPORT STUDENTS FROM EXCEL / CSV */}
+        {activeSubTab === 'import_excel' && (
+          <div className="bg-white border border-slate-200 rounded-3xl p-5 md:p-6 shadow-sm space-y-6">
+            <div className="border-b border-slate-100 pb-3">
+              <h2 className="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                <FileSpreadsheet className="h-5 w-5 text-emerald-600" />
+                <span>Importation Collective d'Élèves (Excel / CSV / Copier-Coller)</span>
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Importez rapidement toute votre liste d'élèves depuis un tableur Excel. Téléchargez le modèle, remplissez-le et importez-le en un clic.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+              
+              {/* Left Column: Instructions and File Upload (6 cols) */}
+              <div className="lg:col-span-6 space-y-5">
+                
+                {/* Download Template Step */}
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-black">1</span>
+                    <strong className="text-xs text-slate-800 uppercase">Télécharger le modèle type</strong>
+                  </div>
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    Le modèle CSV est formaté pour être ouvert directement sous Microsoft Excel ou Google Sheets. Les colonnes obligatoires sont le Nom, le Prénom et la Classe.
+                  </p>
+                  <button
+                    onClick={handleDownloadTemplate}
+                    className="cursor-pointer h-9 px-4 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl transition flex items-center gap-2 shadow-xs"
+                  >
+                    <Download className="h-4 w-4" />
+                    Télécharger le Modèle Excel/CSV
+                  </button>
+                </div>
+
+                {/* Upload File Step */}
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-black">2</span>
+                    <strong className="text-xs text-slate-800 uppercase">Option A : Charger le fichier rempli</strong>
+                  </div>
+                  <div className="border border-dashed border-slate-300 rounded-xl p-4 text-center hover:bg-slate-100/50 transition cursor-pointer relative bg-white">
+                    <input 
+                      type="file" 
+                      accept=".csv, .txt"
+                      onChange={handleImportCSVFile}
+                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                    />
+                    <Upload className="h-6 w-6 text-slate-400 mx-auto mb-1.5" />
+                    <span className="text-[10px] text-slate-550 block font-black">Sélectionner votre fichier CSV d'élèves</span>
+                    <span className="text-[9px] text-slate-400 block mt-0.5">Encodage UTF-8 recommandé (Séparateurs: point-virgule)</span>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Right Column: Copy-Paste Step & Excel Preview (6 cols) */}
+              <div className="lg:col-span-6 space-y-5">
+                
+                {/* Direct copy paste text box */}
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-black">2</span>
+                    <strong className="text-xs text-slate-800 uppercase">Option B : Copier/Coller les lignes Excel</strong>
+                  </div>
+                  <p className="text-[11px] text-slate-555 leading-relaxed">
+                    Sélectionnez vos lignes directement dans Excel, copiez-les (Ctrl+C) puis collez-les directement dans le cadre ci-dessous.
+                  </p>
+                  
+                  <div className="space-y-2">
+                    <textarea
+                      placeholder="Exemple de lignes à coller :&#10;Nom;Prenoms;Genre;DateNaissance;Classe;NomTuteur;TelephoneTuteur;Statut&#10;KOUAME;Affoué Marie;F;2015-06-12;6A;Kouamé Jérôme;+225 0707070707;Inscrit"
+                      value={pasteData}
+                      onChange={(e) => setPasteData(e.target.value)}
+                      className="w-full h-32 p-3 bg-white border border-slate-250 rounded-xl text-[10.5px] font-mono leading-normal focus:outline-none"
+                    />
+                    
+                    <button
+                      onClick={handleProcessPasteData}
+                      className="cursor-pointer w-full h-9 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition flex items-center justify-center gap-2"
+                    >
+                      <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                      Traiter les données collées
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+
+            </div>
+
+            {/* Import Execution Report */}
+            {importReport && (
+              <div className="mt-4 p-4 border border-slate-200 rounded-2xl space-y-3">
+                <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">Rapport de traitement de l'importation</h4>
+                <div className="grid grid-cols-2 gap-3 text-center text-xs">
+                  <div className="p-3 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl">
+                    <span className="block font-bold">Élèves validés</span>
+                    <strong className="text-2xl font-black">{importReport.successCount}</strong>
+                  </div>
+                  <div className="p-3 bg-rose-50 text-rose-800 border border-rose-200 rounded-xl">
+                    <span className="block font-bold">Lignes rejetées</span>
+                    <strong className="text-2xl font-black">{importReport.errors.length}</strong>
+                  </div>
+                </div>
+
+                {importReport.errors.length > 0 && (
+                  <div className="p-3 bg-slate-50 border rounded-xl max-h-48 overflow-y-auto font-mono text-[10px] text-rose-700 leading-normal space-y-1">
+                    {importReport.errors.map((err, idx) => (
+                      <div key={idx}>⚠️ {err}</div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+          </div>
+        )}
+
+        {/* TAB 5: YEAR TRANSITION (CLÔTURE & NOUVELLE ANNÉE) */}
         {activeSubTab === 'year_transition' && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
             
@@ -1151,7 +1420,7 @@ export function ToolsTab({ classes, schoolName, academicYear, setAcademicYear }:
                   onChange={(e) => setResetScheduleOnTransition(e.target.checked)}
                   className="h-4 w-4 rounded border-slate-350 text-[#0b4998] focus:ring-[#0b4998]"
                 />
-                <label htmlFor="reset_schedule_transition" className="font-bold text-slate-650 cursor-pointer">
+                <label htmlFor="reset_schedule_transition" className="font-bold text-slate-655 cursor-pointer">
                   Réinitialiser la grille d'emploi du temps pour la nouvelle année
                 </label>
               </div>
@@ -1215,7 +1484,7 @@ export function ToolsTab({ classes, schoolName, academicYear, setAcademicYear }:
           </div>
         )}
 
-        {/* TAB 5: SYSTEM UTILITIES */}
+        {/* TAB 6: SYSTEM UTILITIES */}
         {activeSubTab === 'system_db' && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
             
@@ -1239,7 +1508,7 @@ export function ToolsTab({ classes, schoolName, academicYear, setAcademicYear }:
                 </button>
 
                 <div className="relative">
-                  <button className="cursor-pointer h-10 w-full px-4 bg-slate-900 hover:bg-slate-850 text-white text-xs font-bold rounded-xl transition flex items-center justify-center gap-2 shadow-xs">
+                  <button className="cursor-pointer h-10 w-full px-4 bg-slate-900 hover:bg-slate-855 text-white text-xs font-bold rounded-xl transition flex items-center justify-center gap-2 shadow-xs">
                     <Upload className="h-4 w-4" />
                     <span>Importer (Restaurer)</span>
                   </button>
@@ -1286,7 +1555,7 @@ export function ToolsTab({ classes, schoolName, academicYear, setAcademicYear }:
                     <Trash2 className="h-4.5 w-4.5" />
                   </div>
                   <div className="space-y-2">
-                    <h3 className="text-xs font-bold text-slate-850 text-rose-900">Nettoyage / Rétablir à Zéro</h3>
+                    <h3 className="text-xs font-bold text-slate-855 text-rose-900">Nettoyage / Rétablir à Zéro</h3>
                     <p className="text-[10.5px] text-slate-500 leading-normal">
                       Efface l'intégralité du cache local (réinitialise les données des élèves, des profs, et détruit l'emploi du temps actuel) pour repartir sur une installation propre.
                     </p>
