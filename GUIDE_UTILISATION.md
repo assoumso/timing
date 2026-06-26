@@ -1,146 +1,151 @@
-# 📘 GUIDE D'UTILISATION NUMÉRIQUE
-## ERP de Gestion Scolaire & Emploi du Temps (« BARAKAT »)
+# 📘 GUIDE D'UTILISATION PROCÉDURAL COMPLET (PAS-À-PAS)
+## ERP Scolaire & Emploi du Temps (« BARAKAT »)
 
-Ce guide décrit l'ensemble des modules et fonctionnalités de l'application, les rôles des utilisateurs ainsi que la marche à suivre pour chaque procédure de gestion.
-
----
-
-## 🗺️ Table des Matières
-1. [Rôles & Gestion des Accès (RBAC)](#1-rôles--gestion-des-accès-rbac)
-2. [Tableau de Bord & Indicateurs](#2-tableau-de-bord--indicateurs)
-3. [Gestion des Emplois du Temps (EDT)](#3-gestion-des-emplois-du-temps-edt)
-4. [Gestion Académique (Élèves, Matières & Coefficients)](#4-gestion-académique-élèves-matières--coefficients)
-5. [Enseignants & Professeurs Principaux](#5-enseignants--professeurs-principaux)
-6. [Registre d'Évaluation & Notes (Saisie des Moyennes)](#6-registre-dévaluation--notes-saisie-des-moyennes)
-7. [Procédure de Saisie & de Validation des Bulletins](#7-procédure-de-saisie--de-validation-des-bulletins)
-8. [Module Financier (Écolages & Recettes)](#8-module-financier-écolages--recettes)
+Ce guide détaille la marche à suivre pas-à-pas pour exécuter chaque tâche sur l'application.
 
 ---
 
-## 1. Rôles & Gestion des Accès (RBAC)
-L'application intègre un contrôle d'accès strict basé sur les rôles et permissions personnalisées.
-
-### Les Profils Utilisateurs
-| Rôle | Description | Droits d'Accès par Défaut |
-|---|---|---|
-| **Directeur / Super Admin** | Administrateur général de l'établissement. | Accès total à tous les onglets, modification des droits, déverrouillage des notes figées, validation finale des Procès-Verbaux (PV). |
-| **Correspondant Fichier (Informaticien)** | Gestionnaire technique des bases de données. | Accès aux configurations d'emplois du temps, inscriptions d'élèves, saisies administratives et déblocages de notes. |
-| **Professeur** | Enseignant responsable de disciplines. | Accès restreint à son emploi du temps personnel et à l'onglet de saisie de ses moyennes uniquement s'il y est expressément autorisé. |
-
-### ⚙️ Octroyer des permissions (Ex: Saisie des Moyennes)
-Seul le **Directeur** ou le **Super Admin** peut gérer ces droits :
-1. Allez dans l'onglet **Administration**.
-2. Dans la liste des comptes utilisateurs, cochez ou décochez l'autorisation **"Saisie des Moyennes"** (`saisie_moyennes`).
-3. La modification est prise en compte instantanément pour l'utilisateur sans qu'il ait besoin de se déconnecter.
+## 🗺️ Index des Procédures
+1. [Comment créer un utilisateur et configurer ses droits (RBAC)](#1-comment-créer-un-utilisateur-et-configurer-ses-droits-rbac)
+2. [Comment configurer les matières, coefficients et langues LV2](#2-comment-configurer-les-matières-coefficients-et-langues-lv2)
+3. [Comment inscrire un nouvel élève](#3-comment-inscrire-un-nouvel-élève)
+4. [Comment affecter un professeur principal à une classe](#4-comment-affecter-un-professeur-principal-à-une-classe)
+5. [Comment planifier un cours sur l'Emploi du Temps (EDT)](#5-comment-planifier-un-cours-sur-lemploi-du-temps-edt)
+6. [Comment déclarer les indisponibilités d'un enseignant](#6-comment-déclarer-les-indisponibilités-dun-enseignant)
+7. [Comment saisir les notes (côté Enseignant) et figer la saisie](#7-comment-saisir-les-notes-côté-enseignant-et-figer-la-saisie)
+8. [Comment déverrouiller une note validée par un enseignant](#8-comment-déverrouiller-une-note-validée-par-un-enseignant)
+9. [Comment saisir ou supprimer des notes (côté Administration)](#9-comment-saisir-ou-supprimer-des-notes-côté-administration)
+10. [Comment valider le procès-verbal (PV) d'une classe](#10-comment-valider-le-procès-verbal-pv-dune-classe)
+11. [Comment imprimer ou exporter les bulletins de notes](#11-comment-imprimer-ou-exporter-les-bulletins-de-notes)
+12. [Comment enregistrer un paiement d'écolage et envoyer le reçu PDF](#12-comment-enregistrer-un-paiement-décolage-et-envoyer-le-reçu-pdf)
 
 ---
 
-## 2. Tableau de Bord & Indicateurs
-Le Tableau de Bord offre une synthèse visuelle immédiate des indicateurs de l'établissement :
-* **Cartes de synthèse** colorées avec des fonds thématiques pour une meilleure lisibilité :
-  - **Effectif Total** (Bleu) : Nombre d'élèves inscrits.
-  - **Taux de Remplissage des Salles** (Vert/Émeraude) : Optimisation de l'espace.
-  - **Cours Planifiés** (Indigo) : Volume d'activité hebdomadaire.
-  - **Professeurs Actifs** (Orange) : Ratio d'encadrement.
-* **Graphiques statistiques** : répartition par classe, par genre et taux de présence.
+### 1. Comment créer un utilisateur et configurer ses droits (RBAC)
+*   **Étape 1 :** Cliquez sur l'onglet **Administration** dans la barre de navigation supérieure.
+*   **Étape 2 :** Dans la section **"Créer un nouveau compte utilisateur"**, remplissez les champs :
+    *   **Nom complet** (ex: *Koffi Yao*)
+    *   **Identifiant / Email** (ex: *koffi.yao@ecole.ci*)
+    *   **Mot de passe**
+*   **Étape 3 :** Choisissez le **Rôle** dans le menu déroulant :
+    *   `Super Admin` ou `Directeur` (accès complet)
+    *   `Informaticien / Correspondant Fichier` (accès technique)
+    *   `Professeur` (accès enseignant restreint)
+*   **Étape 4 :** Cliquez sur le bouton orange **"Créer le compte utilisateur"**.
+*   **Étape 5 (Permissions) :** Dans la table **"Comptes utilisateurs enregistrés"** située juste en dessous, recherchez l'utilisateur créé.
+*   **Étape 6 :** Cochez la case **"Saisie des Moyennes"** (`saisie_moyennes`) pour l'autoriser à saisir les notes de ses classes. La permission prend effet instantanément.
 
 ---
 
-## 3. Gestion des Emplois du Temps (EDT)
-Ce module permet d'élaborer la grille horaire hebdomadaire et de détecter automatiquement les conflits.
-
-### Planification d'un cours
-1. Allez sur **EDT - Planification**.
-2. **Formulaire de création** : Sélectionnez la classe, le professeur, la matière, la salle, le jour de la semaine et le créneau horaire.
-3. L'application vérifie automatiquement les conflits :
-   - *Le professeur est-il déjà occupé sur ce créneau ?*
-   - *La salle est-elle déjà réservée ?*
-   - *Le créneau fait-il partie des indisponibilités déclarées du professeur ?*
-4. En cas de conflit, une alerte s'affiche et bloque la création pour garantir la cohérence des plannings.
-
-### Impression et Export
-* Les plannings peuvent être filtrés par **Classe** ou par **Enseignant** pour une édition propre, prête à l'impression physique.
+### 2. Comment configurer les matières, coefficients et langues LV2
+*   **Étape 1 :** Accédez à l'onglet **Matières** du menu.
+*   **Étape 2 :** Pour ajouter une matière, allez au formulaire **"Ajouter une Matière"** :
+    *   Saisissez le **Nom de la matière** (ex: *Allemand*).
+    *   Sélectionnez le **Coefficient** (poids pour le calcul des moyennes).
+    *   Cochez **"Langue Vivante 2 (LV2)"** s'il s'agit d'une matière facultative ou de langue secondaire.
+    *   Sélectionnez la couleur thématique pour l'affichage dans l'Emploi du Temps.
+*   **Étape 3 :** Cliquez sur le bouton orange **"Ajouter la Matière"**.
 
 ---
 
-## 4. Gestion Académique (Élèves, Matières & Coefficients)
-### Configuration des matières et coefficients
-* Chaque matière est dotée d'un **coefficient** (poids) entrant dans le calcul des moyennes pondérées des bulletins.
-* Les langues vivantes 2 (LV2) comme l'Espagnol ou l'Allemand peuvent être cochées comme telles pour une catégorisation automatique sur le bulletin.
-
-### Inscription des élèves
-* Permet d'ajouter des élèves, de définir leur genre et de les affecter à une classe d'étude.
-
----
-
-## 5. Enseignants & Professeurs Principaux
-* **Gestion des indisponibilités** : Déclaration des plages horaires où l'enseignant est absent ou indisponible.
-* **Attribution de Professeur Principal** : Affectation d'un professeur référent à chaque classe d'étude. Il sera mentionné sur le bulletin officiel.
+### 3. Comment inscrire un nouvel élève
+*   **Étape 1 :** Cliquez sur l'onglet **Élèves**.
+*   **Étape 2 :** Dans le panneau **"Inscrire un nouvel élève"**, complétez les informations requises :
+    *   **Nom** et **Prénom** de l'élève.
+    *   **Genre** (Masculin / Féminin).
+    *   **Classe d'affectation** (sélectionnez dans la liste déroulante des classes existantes).
+*   **Étape 3 :** Cliquez sur **"Enregistrer l'inscription"**. L'élève apparaît immédiatement dans le registre général de sa classe.
 
 ---
 
-## 6. Registre d'Évaluation & Notes (Saisie des Moyennes)
-Pour garantir la sécurité et la traçabilité des données d'évaluation, deux méthodes de saisie coexistent avec un contrôle strict.
-
-### A. Le Portail Enseignant (Saisie des Moyennes)
-Destiné aux professeurs autorisés par la Direction :
-1. Le professeur sélectionne sa classe et sa matière attribuée.
-2. Il saisit les notes de chaque élève pour un devoir/examen donné.
-3. **Important** : Une fois la saisie terminée, le professeur clique sur **"🔒 Valider & Figer"** :
-   - Les notes passent au statut **Figé**.
-   - Le professeur ne peut plus modifier ni supprimer ces notes.
-   - Seul le **Directeur** ou l'**Informaticien** a la main pour effectuer un correctif en cas d'erreur.
-
-### B. Le Registre Administratif (Onglet Évaluations)
-Destiné au Directeur et au Correspondant Fichier :
-* Permet de saisir les notes des élèves manuellement.
-* Permet de supprimer n'importe quelle note erronée.
-* Si un utilisateur non autorisé tente d'y accéder, l'application affiche un écran **"Accès Restreint 🔒"** et bloque le formulaire.
+### 4. Comment affecter un professeur principal à une classe
+*   **Étape 1 :** Rendez-vous dans l'onglet **EDT - Salles & Classes**.
+*   **Étape 2 :** Dans la table des classes enregistrées, localisez la classe concernée et cliquez sur son bouton de modification (ou modifiez directement les paramètres de création de la classe).
+*   **Étape 3 :** Dans le menu déroulant **"Professeur Principal"**, sélectionnez l'enseignant référent de cette classe.
+*   **Étape 4 :** Cliquez sur **"Enregistrer les modifications"**. Le nom du professeur principal sera automatiquement imprimé sur tous les bulletins scolaires de cette classe.
 
 ---
 
-## 7. Procédure de Saisie & de Validation des Bulletins
-
-Pour éviter la publication de bulletins contenant des notes incomplètes ou non approuvées, le système impose le workflow suivant :
-
-```mermaid
-graph TD
-    A[Saisie des Notes par le Professeur] --> B[Professeur valide la saisie : 🔒 Figer]
-    B --> C[Directeur vérifie la grille globale]
-    C --> D[Validation du Procès-Verbal PV de la classe]
-    D --> E[Bulletins Scolaires disponibles à l'édition/impression]
-    
-    style B fill:#d1e7dd,stroke:#0f5132,stroke-width:2px
-    style D fill:#cff4fc,stroke:#087990,stroke-width:2px
-    style E fill:#fff3cd,stroke:#664d03,stroke-width:2px
-```
-
-### Étape 1 : Saisie et Clôture
-Chaque professeur saisit ses notes et valide sa discipline.
-
-### Étape 2 : Vérification via la "Natte"
-Le Directeur consulte la grille de notes (la Natte) pour s'assurer que toutes les disciplines ont été évaluées.
-
-### Étape 3 : Validation du Procès-Verbal (PV)
-1. Allez dans l'onglet **Évaluations**, sous-onglet **Procès-Verbaux & Validation**.
-2. Sélectionnez la classe concernée.
-3. Cliquez sur **"Valider le PV pour cette Classe"**.
-4. Cette action verrouille définitivement la classe pour le trimestre et génère le rapport officiel du Procès-Verbal.
-
-### Étape 4 : Impression des Bulletins
-* L'onglet **Éditeur de Bulletins** n'affiche le bulletin individuel d'un élève **que si le PV de sa classe a été validé** à l'étape précédente.
-* Si le PV n'est pas validé, un message d'avertissement s'affiche demandant la validation préalable du Directeur.
+### 5. Comment planifier un cours sur l'Emploi du Temps (EDT)
+*   **Étape 1 :** Allez sur l'onglet **EDT - Planification**.
+*   **Étape 2 :** Dans le formulaire de gauche, sélectionnez :
+    *   La **Classe** cible.
+    *   Le **Professeur** en charge.
+    *   La **Matière** enseignée.
+    *   La **Salle** réservée.
+*   **Étape 3 :** Indiquez le **Jour** de la semaine et le **Créneau Horaire** (ex: *Mardi de 10h à 12h*).
+*   **Étape 4 :** Cliquez sur **"Planifier ce cours"**.
+    *   *Si un conflit est détecté (enseignant occupé, salle déjà prise ou professeur indisponible), une boîte d'alerte rouge bloque la saisie.*
+    *   *Si tout est correct, le cours s'inscrit automatiquement dans la grille hebdomadaire visible à l'écran.*
 
 ---
 
-## 8. Module Financier (Écolages & Recettes)
-Ce module assure la traçabilité des règlements de scolarité.
+### 6. Comment déclarer les indisponibilités d'un enseignant
+*   **Étape 1 :** Rendez-vous dans l'**Espace Enseignant** (Portail Professeur).
+*   **Étape 2 :** Sélectionnez le professeur concerné dans la liste déroulante supérieure.
+*   **Étape 3 :** Repérez la grille horaire de disponibilité.
+*   **Étape 4 :** Cliquez directement sur les cases de la grille pour basculer leur état :
+    *   Une case grisée avec le symbole **❌ Indisponible** signifie que le professeur ne peut pas enseigner sur ce créneau.
+    *   Les modifications se sauvegardent automatiquement dans la base locale.
 
-### Enregistrement d'un paiement
-1. Sélectionnez l'élève concerné.
-2. Saisissez le montant versé, le motif (Frais d'inscription, Scolarité 1er Trimestre, etc.) et le mode de règlement.
-3. L'application met à jour le solde restant de l'élève.
+---
 
-### Édition de Reçu PDF & Notification
-* Génération instantanée d'un reçu au format PDF officiel de l'école.
-* Intégration d'un bouton d'envoi rapide pour partager le reçu par SMS ou WhatsApp aux parents d'élèves.
+### 7. Comment saisir les notes (côté Enseignant) et figer la saisie
+*   **Étape 1 :** Ouvrez le **Portail Enseignant** > section **Saisie des Moyennes**.
+*   **Étape 2 :** Sélectionnez la **Classe** et la **Discipline (Matière)** dans les filtres en haut.
+*   **Étape 3 :** Dans la liste des élèves qui s'affiche, entrez la note sur 20 dans le champ numérique de chaque élève.
+*   **Étape 4 :** Saisissez l'intitulé de l'évaluation (ex: *Interrogation n°1*) et son coefficient.
+*   **Étape 5 :** Cliquez sur le bouton orange **"Enregistrer toutes les notes saisies"**.
+*   **Étape 6 (Verrouillage) :** Pour figer définitivement ces moyennes, repérez la section **"Notes déjà saisies"** à droite et cliquez sur le bouton vert **"🔒 Valider & Figer"** :
+    *   Les notes affichent désormais le badge **🔒 Figé**.
+    *   Le professeur ne peut plus modifier ni supprimer ces notes.
+
+---
+
+### 8. Comment déverrouiller une note validée par un enseignant
+*   **Étape 1 :** Connectez-vous avec un compte **Directeur** ou **Super Admin**.
+*   **Étape 2 :** Accédez au **Portail Enseignant** (Saisie des Moyennes) et sélectionnez la classe et la matière de la note à corriger.
+*   **Étape 3 :** Dans la liste des notes saisies à droite, localisez la note portant le badge **🔒 Figé**.
+*   **Étape 4 :** Cliquez sur le bouton bleu **"🔓 Déverr."** situé à côté de la note.
+*   **Étape 5 :** Confirmez la demande dans la boîte de dialogue. Le badge disparaît et l'enseignant peut de nouveau modifier la note depuis sa session.
+
+---
+
+### 9. Comment saisir ou supprimer des notes (côté Administration)
+*   **Étape 1 :** Allez sur l'onglet **Évaluations & Examens**.
+*   **Étape 2 :** *Si vous êtes autorisé*, le formulaire de saisie de gauche s'affiche.
+    *   Sélectionnez l'Élève, la Matière, le Coefficient, le type de devoir et la note.
+    *   Cliquez sur **"Soumettre au Registre Électronique"**.
+*   **Étape 3 (Suppression) :** Pour supprimer une note erronée, repérez-la dans la liste de droite **"Derniers coefficients & notes enregistrés"**.
+*   **Étape 4 :** Cliquez sur le bouton rouge **Corbeille (Supprimer)** et validez la confirmation.
+
+---
+
+### 10. Comment valider le procès-verbal (PV) d'une classe
+*   **Étape 1 :** Rendez-vous dans l'onglet **Évaluations & Examens**, sous-onglet **Procès-Verbaux & Validation**.
+*   **Étape 2 :** Sélectionnez la **Classe** souhaitée.
+*   **Étape 3 :** Examinez le tableau de la "Natte de vérification". Assurez-vous que toutes les moyennes des matières sont présentes et valides.
+*   **Étape 4 :** Cliquez sur le bouton bleu **"Valider le PV pour cette Classe"**. Le PV passe au statut **"Validé"** et fige les moyennes trimestrielles de la classe.
+
+---
+
+### 11. Comment imprimer ou exporter les bulletins de notes
+*   **Étape 1 :** Assurez-vous d'abord que le PV de la classe a été validé (voir rubrique précédente).
+*   **Étape 2 :** Allez sur l'onglet **Évaluations & Examens** > sous-onglet **Éditeur de Bulletins**.
+*   **Étape 3 :** Sélectionnez la **Classe** et l'**Élève**.
+    *   *Si le PV est validé, le bulletin s'affiche avec la moyenne générale, le rang de l'élève, et l'appréciation du professeur principal.*
+    *   *Si le PV n'est pas validé, un écran d'avertissement jaune bloque la consultation.*
+*   **Étape 4 :** Cliquez sur le bouton bleu **"Imprimer le Bulletin"** pour ouvrir l'aperçu avant impression système ou le sauvegarder en PDF.
+
+---
+
+### 12. Comment enregistrer un paiement d'écolage et envoyer le reçu PDF
+*   **Étape 1 :** Cliquez sur l'onglet **Finances & Écolages** dans le menu principal.
+*   **Étape 2 :** Recherchez et sélectionnez l'élève dans la liste déroulante.
+*   **Étape 3 :** Remplissez les champs de paiement de la section **"Enregistrer une nouvelle transaction"** :
+    *   **Montant versé** (ex: *50 000 FCFA*)
+    *   **Motif du paiement** (ex: *Scolarité 1er Trimestre*)
+    *   **Mode de règlement** (Espèces, Orange Money, Wave, etc.)
+*   **Étape 4 :** Cliquez sur **"Enregistrer la transaction"**. Le solde restant de l'élève est recalculé.
+*   **Étape 5 :** Dans la table des reçus en bas de page, cliquez sur **"Reçu PDF"** pour télécharger le justificatif.
+*   **Étape 6 :** Cliquez sur le bouton vert **"WhatsApp / SMS"** pour générer le lien de partage rapide et l'envoyer au tuteur de l'élève.
