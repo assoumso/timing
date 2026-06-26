@@ -20,7 +20,8 @@ import {
   ExternalLink,
   MessageSquare,
   TrendingUp,
-  ShieldCheck
+  ShieldCheck,
+  Scissors
 } from 'lucide-react';
 import { ClassItem } from '../types';
 
@@ -93,6 +94,18 @@ export default function FinancialModule({
   const [studentList, setStudentList] = useState<StudentRecord[]>([]);
   const [activeSubTab, setActiveSubTab] = useState<'billing' | 'txn_log' | 'fee_setup' | 'reminders'>('billing');
   const [selectedStudentIdForDetail, setSelectedStudentIdForDetail] = useState<string>('std_1');
+
+  // Popup modal for payment notification after creation
+  const [notificationModal, setNotificationModal] = useState<{
+    isOpen: boolean;
+    studentName: string;
+    amount: number;
+    receiptNo: string;
+    tutorName: string;
+    tutorPhone: string;
+    balanceRemaining: number;
+    classId: string;
+  } | null>(null);
 
   // Reminder logs state
   const [reminderLogs, setReminderLogs] = useState<ReminderLog[]>(() => {
@@ -272,9 +285,26 @@ export default function FinancialModule({
       receiptNo: uniqueReceiptNo
     };
 
+    // Calculate temporary updated total paid to get real-time remaining balance
+    const bill = getStudentBillingSheet(payForm.studentId, student.classId);
+    const totalPaidAfterThisTxn = bill.totalPaid + payAmt;
+    const balanceRemainingAfterThisTxn = Math.max(0, bill.finalInvoiceDue - totalPaidAfterThisTxn);
+
+    // Save transaction
     setTransactions(prev => [newTxn, ...prev]);
     setActiveTxnId(newTxn.id);
-    alert(`Encaissement enregistré avec succès !\nReçu n° ${uniqueReceiptNo} délivré.`);
+
+    // Open communication panel popup
+    setNotificationModal({
+      isOpen: true,
+      studentName: `${student.lastName} ${student.firstName}`,
+      amount: payAmt,
+      receiptNo: uniqueReceiptNo,
+      tutorName: student.tutorName || 'Parent d’élève',
+      tutorPhone: student.tutorPhone || '',
+      balanceRemaining: balanceRemainingAfterThisTxn,
+      classId: student.classId
+    });
 
     setPayForm(prev => ({
       ...prev,
@@ -518,20 +548,15 @@ export default function FinancialModule({
       const bill = getStudentBillingSheet(std.id, std.classId);
       
       if (std.assignmentStatus === 'Affecté') {
-        // State affectés pay single flat parental fee (considered Enrollment / Inscription)
         expectedEnrollment += bill.finalInvoiceDue;
         paidEnrollment += Math.min(bill.totalPaid, bill.finalInvoiceDue);
       } else {
-        // Private students
-        // 1st installment is Enrollment ("Inscription")
-        // Other installments are Tuition ("Scolarité")
         const firstInst = bill.installments[0];
         const firstInstExpected = firstInst ? firstInst.discountedAmount : 0;
         
         expectedEnrollment += firstInstExpected;
         expectedTuition += Math.max(0, bill.finalInvoiceDue - firstInstExpected);
 
-        // Calculate paid distribution
         paidEnrollment += Math.min(bill.totalPaid, firstInstExpected);
         paidTuition += Math.max(0, bill.totalPaid - firstInstExpected);
       }
@@ -566,11 +591,75 @@ export default function FinancialModule({
 
   const ledgerSummary = calculateGlobalSummaryLedger();
 
+  // Helper to generate the exact payment confirmation message text
+  const getPaymentConfirmationMessage = (data: typeof notificationModal) => {
+    if (!data) return '';
+    return `Cher parent ${data.tutorName}, nous accusons réception avec succès du versement de ${data.amount.toLocaleString()} FCFA effectué ce jour pour la scolarité de votre enfant ${data.studentName} (${data.classId}). Reçu officiel n° ${data.receiptNo} enregistré. Reliquat restant : ${data.balanceRemaining.toLocaleString()} FCFA. Merci de votre confiance. La direction de ${schoolName}.`;
+  };
+
   return (
     <div className="space-y-6">
       
+      {/* 🚀 Real-time WhatsApp/SMS payment confirmation popup */}
+      {notificationModal && notificationModal.isOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-xl max-w-lg w-full p-6 space-y-4 animate-in fade-in zoom-in duration-200">
+            <div className="flex items-center gap-2.5 text-emerald-700">
+              <div className="h-9 w-9 rounded-full bg-emerald-100 flex items-center justify-center">
+                <Check className="h-5 w-5" />
+              </div>
+              <div>
+                <h4 className="text-sm font-black uppercase text-slate-800">Versement enregistré avec succès !</h4>
+                <p className="text-[10px] text-slate-500 font-medium">Reçu n° {notificationModal.receiptNo} • {notificationModal.amount.toLocaleString()} FCFA</p>
+              </div>
+            </div>
+
+            <div className="space-y-1.5 p-3 bg-slate-50 border border-slate-200 rounded-2xl">
+              <span className="text-[9px] font-black text-slate-400 block uppercase">Texte à notifier au Parent ({notificationModal.tutorName})</span>
+              <p className="text-xs font-semibold text-slate-700 leading-relaxed font-sans">
+                {getPaymentConfirmationMessage(notificationModal)}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 pt-2">
+              <button 
+                onClick={() => {
+                  const msgText = encodeURIComponent(getPaymentConfirmationMessage(notificationModal));
+                  const cleanPhone = notificationModal.tutorPhone.replace(/[\s+]/g, '');
+                  window.open(`https://wa.me/${cleanPhone}?text=${msgText}`, '_blank');
+                }}
+                className="cursor-pointer py-2 bg-emerald-600 hover:bg-emerald-750 text-white text-xs font-black rounded-xl flex items-center justify-center gap-1.5 transition"
+              >
+                <MessageSquare className="h-4 w-4" />
+                Envoyer via WhatsApp
+              </button>
+
+              <button 
+                onClick={() => {
+                  navigator.clipboard.writeText(getPaymentConfirmationMessage(notificationModal));
+                  alert("Message copié dans le presse-papiers (SMS prêt) !");
+                }}
+                className="cursor-pointer py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-black rounded-xl flex items-center justify-center gap-1.5 transition"
+              >
+                <Copy className="h-4 w-4" />
+                Copier le SMS
+              </button>
+            </div>
+
+            <div className="text-center pt-2">
+              <button 
+                onClick={() => setNotificationModal(null)}
+                className="cursor-pointer text-xs font-bold text-slate-400 hover:text-slate-600 underline"
+              >
+                Fermer cette fenêtre
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header panel */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-light">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-light print:hidden">
         <div>
           <h2 className="text-xl font-black text-slate-905 tracking-tight flex items-center gap-2">
             <Banknote className="h-5.5 w-5.5 text-indigo-650" />
@@ -624,7 +713,7 @@ export default function FinancialModule({
 
       {/* RENDER VIEW: CENTRAL BILLING DIRECTORY & DISMISSION */}
       {activeSubTab === 'billing' && (
-        <div className="space-y-6">
+        <div className="space-y-6 print:hidden">
           
           {/* Global Summary Table / Ledger Dashboard */}
           <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs space-y-4">
@@ -656,7 +745,7 @@ export default function FinancialModule({
                     <tr className="border-b border-slate-100 hover:bg-slate-50/40">
                       <td className="p-3 font-extrabold text-slate-700">Droits d'Inscription</td>
                       <td className="p-3 text-right font-mono font-bold">{ledgerSummary.expectedEnrollment.toLocaleString()} FCFA</td>
-                      <td className="p-3 text-right font-mono font-black text-emerald-850">+{ledgerSummary.paidEnrollment.toLocaleString()} FCFA</td>
+                      <td className="p-3 text-right font-mono font-black text-emerald-855">+{ledgerSummary.paidEnrollment.toLocaleString()} FCFA</td>
                       <td className="p-3 text-right font-mono font-bold text-rose-750">{ledgerSummary.remainingEnrollment.toLocaleString()} FCFA</td>
                       <td className="p-3 text-center">
                         <div className="flex items-center gap-2 justify-center">
@@ -702,9 +791,9 @@ export default function FinancialModule({
               {/* Graphical Card (4 cols) */}
               <div className="lg:col-span-4 bg-[#0b4998]/5 border border-[#0b4998]/20 rounded-2xl p-4 space-y-3 flex flex-col justify-between h-full min-h-[140px]">
                 <div>
-                  <span className="text-[10px] uppercase font-black text-indigo-750 block">Indice de Recouvrement</span>
+                  <span className="text-[10px] uppercase font-black text-indigo-755 block">Indice de Recouvrement</span>
                   <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                    Le taux global d'exécution est à <strong className="text-[#0b4998]">{ledgerSummary.rateTotal}%</strong> avec un restant à recouvrer total de <strong className="text-rose-750">{ledgerSummary.totalRemaining.toLocaleString()} FCFA</strong>.
+                    Le taux global d'exécution est à <strong className="text-[#0b4998]">{ledgerSummary.rateTotal}%</strong> avec un restant à recouvrer total de <strong className="text-rose-755">{ledgerSummary.totalRemaining.toLocaleString()} FCFA</strong>.
                   </p>
                 </div>
 
@@ -827,7 +916,7 @@ export default function FinancialModule({
                         <div className="flex justify-between items-start">
                           <div>
                             <span className="font-extrabold text-slate-800 text-xs block">{inst.label}</span>
-                            <span className="text-[10px] text-slate-450 font-bold block flex items-center gap-1">
+                            <span className="text-[10px] text-slate-455 font-bold block flex items-center gap-1">
                               <Calendar className="h-3 w-3 text-slate-400" />
                               Limite : {new Date(inst.dueDate).toLocaleDateString('fr-FR')}
                             </span>
@@ -925,7 +1014,7 @@ export default function FinancialModule({
                         <td className="p-2.5 text-right font-semibold font-mono">
                           {bill.finalInvoiceDue.toLocaleString()} FCFA
                         </td>
-                        <td className="p-2.5 text-right text-emerald-850 font-mono font-black">{bill.totalPaid.toLocaleString()} FCFA</td>
+                        <td className="p-2.5 text-right text-emerald-855 font-mono font-black">{bill.totalPaid.toLocaleString()} FCFA</td>
                         <td className="p-2.5 text-right text-red-750 font-mono font-black">{bill.balanceRemaining.toLocaleString()} FCFA</td>
                         <td className="p-2.5 text-center">
                           <button 
@@ -951,7 +1040,7 @@ export default function FinancialModule({
 
       {/* RENDER VIEW: TRANSACTION LEDGER & PRINT RECEIPT */}
       {activeSubTab === 'txn_log' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start print:hidden">
           
           {/* Cash book log lists */}
           <div className="lg:col-span-6 bg-white border border-slate-200 rounded-3xl p-5 shadow-xs space-y-4">
@@ -998,17 +1087,17 @@ export default function FinancialModule({
               <div className="p-2 space-y-3">
                 
                 <div className="flex justify-between items-center bg-white p-3 border border-slate-200 rounded-2xl shadow-xs">
-                  <span className="text-xs font-semibold text-slate-500">Aperçu du justificatif :</span>
+                  <span className="text-xs font-semibold text-slate-500">Aperçu du justificatif double (Archives + Parent) :</span>
                   <button 
                     onClick={() => window.print()}
                     className="cursor-pointer px-4.5 py-1.5 bg-[#0b4998] text-white text-xs font-black rounded-lg flex items-center gap-1 shadow-sm transition"
                   >
                     <Printer className="h-3.5 w-3.5" />
-                    Imprimer le reçu client
+                    Imprimer le reçu double A4
                   </button>
                 </div>
 
-                {/* Printable receipt canvas */}
+                {/* Printable receipt canvas (Parent Copy screen preview) */}
                 <div className="bg-white border-2 border-dashed border-slate-400 p-6 text-slate-900 rounded-3xl space-y-4 font-sans relative overflow-hidden select-none">
                   
                   {/* Decorative stamp background */}
@@ -1025,7 +1114,7 @@ export default function FinancialModule({
                       <span className="text-[8px] font-bold text-slate-400 block uppercase">{schoolSubName}</span>
                     </div>
                     <div className="text-right">
-                      <span className="text-[10px] bg-slate-955 text-white px-2 py-0.5 rounded font-black font-mono">REÇU DE CAISSE</span>
+                      <span className="text-[10px] bg-slate-950 text-white px-2 py-0.5 rounded font-black font-mono">EXEMPLAIRE PARENT</span>
                     </div>
                   </div>
 
@@ -1102,7 +1191,7 @@ export default function FinancialModule({
 
       {/* RENDER VIEW: FEES GRILLE CONFIGURATION */}
       {activeSubTab === 'fee_setup' && (
-        <div className="space-y-6">
+        <div className="space-y-6 print:hidden">
           
           {/* Tuition Fee Rates table */}
           <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs space-y-4">
@@ -1258,7 +1347,7 @@ export default function FinancialModule({
 
       {/* RENDER VIEW: REMINDERS AND ARREARS MANAGEMENT */}
       {activeSubTab === 'reminders' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start print:hidden">
           
           {/* Left panel: scanned list of candidates with arrears (8 cols) */}
           <div className="lg:col-span-8 bg-white border border-slate-200 rounded-3xl p-5 shadow-xs space-y-4">
@@ -1347,7 +1436,7 @@ export default function FinancialModule({
                     <strong className="text-slate-800 font-extrabold">{activeReminderItem.tutorName}</strong>
                   </div>
                   <div>
-                    <span className="text-slate-450 font-bold block uppercase text-[9px]">Téléphone Tuteur :</span>
+                    <span className="text-slate-455 font-bold block uppercase text-[9px]">Téléphone Tuteur :</span>
                     <strong className="text-indigo-800 font-mono font-black">{activeReminderItem.tutorPhone}</strong>
                   </div>
                   <div>
@@ -1362,13 +1451,13 @@ export default function FinancialModule({
                   <textarea 
                     value={getReminderTemplateMessage(activeReminderItem)}
                     readOnly
-                    className="w-full h-32 p-2 border border-slate-250 bg-slate-50 rounded-xl text-xs font-semibold text-slate-700 leading-relaxed focus:outline-none"
+                    className="w-full h-32 p-2 border border-slate-255 bg-slate-50 rounded-xl text-xs font-semibold text-slate-700 leading-relaxed focus:outline-none"
                   />
                 </div>
 
                 {/* Manual Reminder Channels */}
                 <div className="space-y-2">
-                  <span className="text-[9px] font-black uppercase text-slate-450 tracking-wider block">Canaux d'envoi & Traçabilité</span>
+                  <span className="text-[9px] font-black uppercase text-slate-455 tracking-wider block">Canaux d'envoi & Traçabilité</span>
                   
                   <div className="grid grid-cols-2 gap-2">
                     {/* SMS */}
@@ -1439,14 +1528,143 @@ export default function FinancialModule({
         </div>
       )}
 
-      {/* RENDER DOCKED PRINTABLE A4 REMINDER CONVOCATION IF PRINT ACTION TRIGGERED */}
+      {/* ----------------------------------------------------
+          PRINTABLE CANVAS: DOUBLE RECEIPT FOR A4 CUTOUT 
+      ---------------------------------------------------- */}
+      {selectedTxnObj && selectedTxnStudentBilling && (
+        <div className="hidden print:block fixed inset-0 bg-white z-9999 text-slate-900 p-6 font-sans text-xs leading-tight select-none space-y-12">
+          
+          {/* ================= EXEMPLAIRE 1 : ARCHIVES DE L'ÉTABLISSEMENT ================= */}
+          <div className="border border-slate-350 p-5 rounded-2xl space-y-3 relative overflow-hidden">
+            <div className="absolute right-4 top-4 border border-indigo-700 text-indigo-750 px-2 py-0.5 rounded text-[8px] font-black uppercase">
+              COPIE ÉTABLISSEMENT (ARCHIVES)
+            </div>
+
+            <div className="flex items-start justify-between border-b pb-2">
+              <div>
+                <h4 className="text-xs font-black text-[#0b4998] uppercase leading-none">{schoolName}</h4>
+                <span className="text-[8px] font-bold text-slate-400 block uppercase">{schoolSubName}</span>
+                <span className="text-[7px] italic text-slate-400 block">"{schoolMotto}"</span>
+              </div>
+              <div className="text-right">
+                <span className="text-xs font-black font-mono text-slate-900">REÇU DE CAISSE N° {selectedTxnObj.receiptNo}</span>
+                <span className="text-[9px] text-slate-400 block font-mono">Date : {selectedTxnObj.recordedAt}</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 text-[10px]">
+              <div>
+                <span className="text-slate-450 font-bold block uppercase text-[8px]">Élève Candidat :</span>
+                <strong className="text-slate-905 uppercase text-xs font-black">{selectedTxnObj.studentName}</strong>
+                <span className="text-slate-450 block font-mono">Matricule : {selectedTxnStudentBilling.assignmentStatus === 'Affecté' ? `${selectedTxnObj.studentId} (Affecté)` : selectedTxnObj.studentId}</span>
+              </div>
+              <div>
+                <span className="text-slate-450 font-bold block uppercase text-[8px]">Tuteur Facturé :</span>
+                <strong className="text-slate-905 uppercase">{detailStudent?.tutorName || 'Tuteur'}</strong>
+                <span className="text-slate-450 block font-mono">Tél : {detailStudent?.tutorPhone || 'N/A'}</span>
+              </div>
+            </div>
+
+            <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl flex justify-between items-center text-[10px]">
+              <div>
+                <span className="text-slate-500 font-bold">Versement Scolarité (Mode : {selectedTxnObj.paymentMethod})</span>
+                {selectedTxnObj.refNo && <span className="text-slate-400 font-mono block text-[8px]">Ref: {selectedTxnObj.refNo}</span>}
+              </div>
+              <div className="text-right">
+                <span className="text-xs font-black text-emerald-800 font-mono">+{selectedTxnObj.amount.toLocaleString()} FCFA</span>
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center text-[9px] border-t border-slate-200 pt-2 font-semibold">
+              <span>Total attendu : {selectedTxnStudentBilling.finalInvoiceDue.toLocaleString()} FCFA</span>
+              <span>Total versé cumulé : {selectedTxnStudentBilling.totalPaid.toLocaleString()} FCFA</span>
+              <span className="text-rose-750 font-black">Reliquat dû : {selectedTxnStudentBilling.balanceRemaining.toLocaleString()} FCFA</span>
+            </div>
+
+            <div className="pt-4 flex justify-between items-center text-[9px] italic text-slate-400">
+              <span>Année Académique : {academicYear}</span>
+              <div className="text-right font-bold text-slate-600 not-italic">
+                <span>Le Caissier : VISA OK</span>
+              </div>
+            </div>
+          </div>
+
+          {/* ================= LINE DE DÉCOUPE / CUTOUT LINE ================= */}
+          <div className="flex items-center gap-2 text-slate-400 text-[10px] select-none my-6">
+            <div className="flex-1 border-t border-dashed border-slate-350"></div>
+            <div className="flex items-center gap-1 font-bold font-mono">
+              <Scissors className="h-3.5 w-3.5 text-slate-500" />
+              <span>DÉCOUPE REÇU (Plier & Découper ici)</span>
+            </div>
+            <div className="flex-1 border-t border-dashed border-slate-350"></div>
+          </div>
+
+          {/* ================= EXEMPLAIRE 2 : EXEMPLAIRE DU PARENT ================= */}
+          <div className="border border-slate-350 p-5 rounded-2xl space-y-3 relative overflow-hidden">
+            <div className="absolute right-4 top-4 border border-emerald-600 text-emerald-800 px-2 py-0.5 rounded text-[8px] font-black uppercase">
+              COPIE PARENT (ÉLÈVE)
+            </div>
+
+            <div className="flex items-start justify-between border-b pb-2">
+              <div>
+                <h4 className="text-xs font-black text-[#0b4998] uppercase leading-none">{schoolName}</h4>
+                <span className="text-[8px] font-bold text-slate-400 block uppercase">{schoolSubName}</span>
+                <span className="text-[7px] italic text-slate-400 block">"{schoolMotto}"</span>
+              </div>
+              <div className="text-right">
+                <span className="text-xs font-black font-mono text-slate-905">REÇU DE CAISSE N° {selectedTxnObj.receiptNo}</span>
+                <span className="text-[9px] text-slate-400 block font-mono">Date : {selectedTxnObj.recordedAt}</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 text-[10px]">
+              <div>
+                <span className="text-slate-455 font-bold block uppercase text-[8px]">Élève Candidat :</span>
+                <strong className="text-slate-905 uppercase text-xs font-black">{selectedTxnObj.studentName}</strong>
+                <span className="text-slate-455 block font-mono">Matricule : {selectedTxnStudentBilling.assignmentStatus === 'Affecté' ? `${selectedTxnObj.studentId} (Affecté)` : selectedTxnObj.studentId}</span>
+              </div>
+              <div>
+                <span className="text-slate-455 font-bold block uppercase text-[8px]">Tuteur Facturé :</span>
+                <strong className="text-slate-905 uppercase">{detailStudent?.tutorName || 'Tuteur'}</strong>
+                <span className="text-slate-455 block font-mono">Tél : {detailStudent?.tutorPhone || 'N/A'}</span>
+              </div>
+            </div>
+
+            <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl flex justify-between items-center text-[10px]">
+              <div>
+                <span className="text-slate-500 font-bold">Versement Scolarité (Mode : {selectedTxnObj.paymentMethod})</span>
+                {selectedTxnObj.refNo && <span className="text-slate-400 font-mono block text-[8px]">Ref: {selectedTxnObj.refNo}</span>}
+              </div>
+              <div className="text-right">
+                <span className="text-xs font-black text-emerald-800 font-mono">+{selectedTxnObj.amount.toLocaleString()} FCFA</span>
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center text-[9px] border-t border-slate-200 pt-2 font-semibold">
+              <span>Total attendu : {selectedTxnStudentBilling.finalInvoiceDue.toLocaleString()} FCFA</span>
+              <span>Total versé cumulé : {selectedTxnStudentBilling.totalPaid.toLocaleString()} FCFA</span>
+              <span className="text-rose-750 font-black">Reliquat dû : {selectedTxnStudentBilling.balanceRemaining.toLocaleString()} FCFA</span>
+            </div>
+
+            <div className="pt-4 flex justify-between items-center text-[9px] italic text-slate-400">
+              <span>Année Académique : {academicYear}</span>
+              <div className="text-right font-bold text-slate-655 not-italic">
+                <span>Le Caissier : VISA OK</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      )}
+
+      {/* RENDER DOCKED PRINTABLE A4 REMINDER CONVOCATION */}
       {activeReminderItem && (
         <div className="hidden print:block fixed inset-0 bg-white z-9999 text-slate-900 p-12 font-serif text-sm leading-relaxed select-none">
           {/* Header */}
           <div className="text-center border-b pb-4 mb-8">
-            <h1 className="text-lg font-bold uppercase tracking-tight text-slate-950">{schoolName}</h1>
+            <h1 className="text-lg font-bold uppercase tracking-tight text-slate-995">{schoolName}</h1>
             <p className="text-[10px] uppercase font-bold tracking-widest text-slate-500 mt-1">{schoolSubName}</p>
-            <p className="text-[9px] italic text-slate-450 mt-0.5">"{schoolMotto}"</p>
+            <p className="text-[9px] italic text-slate-455 mt-0.5">"{schoolMotto}"</p>
             <div className="text-[10px] font-mono mt-2 text-slate-500">Année Académique : {academicYear}</div>
           </div>
 
