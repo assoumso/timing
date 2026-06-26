@@ -13,7 +13,12 @@ import {
   Sliders,
   UserCheck,
   Calendar,
-  AlertTriangle
+  AlertTriangle,
+  Send,
+  Copy,
+  Mail,
+  ExternalLink,
+  MessageSquare
 } from 'lucide-react';
 import { ClassItem } from '../types';
 
@@ -35,9 +40,9 @@ interface FeeInstallment {
 interface TuitionFeeRate {
   classId: string;
   className: string;
-  amountNonAffecte: number; // Private fee
-  amountAffecte: number; // State subsidised fee
-  installmentsNonAffecte: FeeInstallment[]; // Custom installments for private students
+  amountNonAffecte: number;
+  amountAffecte: number;
+  installmentsNonAffecte: FeeInstallment[];
 }
 
 interface PaymentTransaction {
@@ -61,6 +66,17 @@ interface StudentRecord {
   status: string;
   matricule: string;
   assignmentStatus?: 'Affecté' | 'Non Affecté';
+  tutorName?: string;
+  tutorPhone?: string;
+}
+
+interface ReminderLog {
+  id: string;
+  studentId: string;
+  studentName: string;
+  sentAt: string;
+  method: 'SMS' | 'WhatsApp' | 'Courrier A4';
+  message: string;
 }
 
 export default function FinancialModule({
@@ -73,10 +89,18 @@ export default function FinancialModule({
 }: FinancialModuleProps) {
   
   const [studentList, setStudentList] = useState<StudentRecord[]>([]);
-  const [activeSubTab, setActiveSubTab] = useState<'billing' | 'txn_log' | 'fee_setup'>('billing');
-  
-  // Selection pointer for student accounting details
+  const [activeSubTab, setActiveSubTab] = useState<'billing' | 'txn_log' | 'fee_setup' | 'reminders'>('billing');
   const [selectedStudentIdForDetail, setSelectedStudentIdForDetail] = useState<string>('std_1');
+
+  // Reminder logs state
+  const [reminderLogs, setReminderLogs] = useState<ReminderLog[]>(() => {
+    const saved = localStorage.getItem('erp_payment_reminders_log');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('erp_payment_reminders_log', JSON.stringify(reminderLogs));
+  }, [reminderLogs]);
 
   useEffect(() => {
     loadStudents();
@@ -88,7 +112,9 @@ export default function FinancialModule({
       const parsed = JSON.parse(saved);
       const initialized = parsed.map((s: any) => ({
         ...s,
-        assignmentStatus: s.assignmentStatus || 'Non Affecté'
+        assignmentStatus: s.assignmentStatus || 'Non Affecté',
+        tutorName: s.tutorName || 'Parent d’élève',
+        tutorPhone: s.tutorPhone || '+225 01 02 03 04 05'
       }));
       setStudentList(initialized);
       if (initialized.length > 0) {
@@ -96,11 +122,11 @@ export default function FinancialModule({
       }
     } else {
       const defaults: StudentRecord[] = [
-        { id: 'std_1', firstName: 'Koffi', lastName: 'Yao Anderson', gender: 'M', classId: '6A', status: 'Inscrit', matricule: 'M-2026-4102', assignmentStatus: 'Non Affecté' },
-        { id: 'std_2', firstName: 'Diomandé', lastName: 'Aminata', gender: 'F', classId: '6B', status: 'Réinscrit', matricule: 'M-2024-1185', assignmentStatus: 'Affecté' },
-        { id: 'std_3', firstName: 'Kouassi', lastName: 'Koffi Charles', gender: 'M', classId: '3A', status: 'Inscrit', matricule: 'M-2026-9981', assignmentStatus: 'Non Affecté' },
-        { id: 'std_4', firstName: 'Sylla', lastName: 'Ibrahim Karim', gender: 'M', classId: '3B', status: 'Réinscrit', matricule: 'M-2023-0056', assignmentStatus: 'Affecté' },
-        { id: 'std_5', firstName: 'Gomez', lastName: 'Marie-Chantal Enola', gender: 'F', classId: '3A', status: 'Inscrit', matricule: 'M-2026-0103', assignmentStatus: 'Non Affecté' }
+        { id: 'std_1', firstName: 'Koffi', lastName: 'Yao Anderson', gender: 'M', classId: '6A', status: 'Inscrit', matricule: 'M-2026-4102', assignmentStatus: 'Non Affecté', tutorName: 'Koffi Blaise', tutorPhone: '+225 07 41 85 96 03' },
+        { id: 'std_2', firstName: 'Diomandé', lastName: 'Aminata', gender: 'F', classId: '6B', status: 'Réinscrit', matricule: 'M-2024-1185', assignmentStatus: 'Affecté', tutorName: 'Diomandé Lanciné', tutorPhone: '+225 05 52 41 12 74' },
+        { id: 'std_3', firstName: 'Kouassi', lastName: 'Koffi Charles', gender: 'M', classId: '3A', status: 'Inscrit', matricule: 'M-2026-9981', assignmentStatus: 'Non Affecté', tutorName: 'Mme Kouassi Hortense', tutorPhone: '+225 07 09 85 12 43' },
+        { id: 'std_4', firstName: 'Sylla', lastName: 'Ibrahim Karim', gender: 'M', classId: '3B', status: 'Réinscrit', matricule: 'M-2023-0056', assignmentStatus: 'Affecté', tutorName: 'Sylla Fatoumata', tutorPhone: '+225 01 02 03 04 05' },
+        { id: 'std_5', firstName: 'Gomez', lastName: 'Marie-Chantal Enola', gender: 'F', classId: '3A', status: 'Inscrit', matricule: 'M-2026-0103', assignmentStatus: 'Non Affecté', tutorName: 'Gomez Robert (Ambass.)', tutorPhone: '+225 07 41 02 85 96' }
       ];
       setStudentList(defaults);
       localStorage.setItem('erp_student_records', JSON.stringify(defaults));
@@ -123,8 +149,6 @@ export default function FinancialModule({
   const [feeSchedule, setFeeSchedule] = useState<TuitionFeeRate[]>(() => {
     const saved = localStorage.getItem('erp_fees_schedule_v3');
     if (saved) return JSON.parse(saved);
-    
-    // Default schedules with custom installments for private students
     return [
       { 
         classId: '6A', 
@@ -173,7 +197,7 @@ export default function FinancialModule({
     ];
   });
 
-  // Scholars & discounts table { "studentId": discountPercent (0 to 100) }
+  // Scholars & discounts table
   const [studentDiscounts, setStudentDiscounts] = useState<Record<string, number>>(() => {
     const saved = localStorage.getItem('erp_student_discount_rates');
     return saved ? JSON.parse(saved) : {
@@ -288,13 +312,10 @@ export default function FinancialModule({
     const totalPaid = studentTxns.reduce((sum, t) => sum + t.amount, 0);
     const balanceRemaining = Math.max(0, finalInvoiceDue - totalPaid);
 
-    // Calculate details for each installment (only for private non-affecté students)
-    // Apply discount proportionally to each installment
+    // Calculate details for each installment
     const processedInstallments = rawInstallments.map((inst, index) => {
       const discountedInstallmentAmt = Math.round(inst.amount * (1 - discountPercent / 100));
       
-      // Calculate how much of this installment has been covered
-      // Determine cumulative targets up to this installment
       let cumulativeTarget = 0;
       for (let i = 0; i <= index; i++) {
         cumulativeTarget += Math.round(rawInstallments[i].amount * (1 - discountPercent / 100));
@@ -316,7 +337,6 @@ export default function FinancialModule({
         paidForThisInst = 0;
       }
 
-      // Check if past due date
       const isPastDue = new Date(inst.dueDate).getTime() < new Date().getTime();
       if (status !== 'Payé' && isPastDue) {
         status = 'En retard';
@@ -357,7 +377,7 @@ export default function FinancialModule({
   // Global collection stats
   const globalTotalCollected = transactions.reduce((sum, t) => sum + t.amount, 0);
 
-  // Helper to append / update custom installments for a class rate
+  // Helper to append / update custom installments
   const handleUpdateInstallment = (classId: string, index: number, field: keyof FeeInstallment, val: string | number) => {
     const updatedSchedule = feeSchedule.map(rate => {
       if (rate.classId === classId) {
@@ -367,7 +387,6 @@ export default function FinancialModule({
           [field]: field === 'amount' ? Number(val) : val
         };
 
-        // Recalculate total non-affecté amount to match sum of installments
         const sumOfInstallments = copyInst.reduce((sum, inst) => sum + inst.amount, 0);
 
         return {
@@ -418,6 +437,74 @@ export default function FinancialModule({
     setFeeSchedule(updatedSchedule);
   };
 
+  // ----------------------------------------------------
+  // Relances & Retards (Reminders Panel) Logic
+  // ----------------------------------------------------
+  const [selectedReminderStudentId, setSelectedReminderStudentId] = useState<string>('');
+  
+  // Scans all students and extracts those who are late or due in less than 7 days
+  const getRemindersScannerList = () => {
+    const list: any[] = [];
+    studentList.forEach(std => {
+      if (std.assignmentStatus === 'Affecté') return; // State-sponsored are not subject to standard installments
+      
+      const bill = getStudentBillingSheet(std.id, std.classId);
+      
+      bill.installments.forEach(inst => {
+        if (inst.status === 'Payé') return;
+        
+        const limitTime = new Date(inst.dueDate).getTime();
+        const nowTime = new Date().getTime();
+        const daysRemaining = Math.ceil((limitTime - nowTime) / (1000 * 60 * 60 * 24));
+        
+        // Late or due within 7 days
+        if (daysRemaining <= 7) {
+          list.push({
+            studentId: std.id,
+            studentName: `${std.lastName} ${std.firstName}`,
+            classId: std.classId,
+            matricule: std.matricule,
+            tutorName: std.tutorName || 'Parent',
+            tutorPhone: std.tutorPhone || '',
+            installmentLabel: inst.label,
+            dueDate: inst.dueDate,
+            dueAmount: inst.discountedAmount,
+            remainingAmount: inst.remainingAmount,
+            status: inst.status,
+            daysRemaining
+          });
+        }
+      });
+    });
+    return list;
+  };
+
+  const scannerList = getRemindersScannerList();
+
+  const handleSendReminderLog = (studentId: string, method: 'SMS' | 'WhatsApp' | 'Courrier A4', msg: string) => {
+    const student = studentList.find(s => s.id === studentId);
+    if (!student) return;
+
+    const newLog: ReminderLog = {
+      id: 'rem_' + Date.now(),
+      studentId,
+      studentName: `${student.lastName} ${student.firstName}`,
+      sentAt: new Date().toLocaleDateString('fr-FR') + ' ' + new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+      method,
+      message: msg
+    };
+
+    setReminderLogs(prev => [newLog, ...prev]);
+    alert(`Relance (${method}) enregistrée pour ${newLog.studentName}.`);
+  };
+
+  const getReminderTemplateMessage = (item: any) => {
+    return `Cher parent ${item.tutorName}, nous vous informons que la scolarité de votre enfant ${item.studentName} (${item.classId}), matricule ${item.matricule}, présente un solde restant de ${item.remainingAmount.toLocaleString()} FCFA pour la tranche "${item.installmentLabel}" qui était attendue le ${new Date(item.dueDate).toLocaleDateString('fr-FR')}. Merci de régulariser ce paiement dans les plus brefs délais à la caisse de l'école. Cordialement, la direction de ${schoolName}.`;
+  };
+
+  // Selected reminder student detail
+  const activeReminderItem = scannerList.find(x => x.studentId === selectedReminderStudentId);
+
   return (
     <div className="space-y-6">
       
@@ -429,7 +516,7 @@ export default function FinancialModule({
             <span>Gestion Financière & Recouvrement Scolarités</span>
           </h2>
           <p className="text-xs text-slate-500 font-medium">
-            Pilotez la caisse : configurez les tarifs d'écolage par niveau (élèves affectés par l'état vs élèves privés non affectés), planifiez l'échéancier des versements et suivez les retards.
+            Pilotez la caisse : configurez les tarifs d'écolage par niveau (élèves affectés par l'état vs élèves privés non affectés), planifiez l'échéancier des versements et gérez les relances.
           </p>
         </div>
 
@@ -461,6 +548,15 @@ export default function FinancialModule({
           >
             <Percent className="h-4 w-4" />
             Grille des Versements
+          </button>
+          <button 
+            onClick={() => setActiveSubTab('reminders')}
+            className={`cursor-pointer px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+              activeSubTab === 'reminders' ? 'bg-[#0b4998] text-white shadow-xs' : 'bg-white text-slate-600 border border-slate-200'
+            }`}
+          >
+            <AlertTriangle className="h-4 w-4 text-amber-500" />
+            Relances & Retards
           </button>
         </div>
       </div>
@@ -531,165 +627,165 @@ export default function FinancialModule({
                       value={payForm.refNo}
                       onChange={(e) => setPayForm(prev => ({ ...prev, refNo: e.target.value }))}
                       className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none"
-                    />
-                  </div>
+                  />
                 </div>
+              </div>
 
-                <button 
-                  type="submit"
-                  className="cursor-pointer w-full py-2 bg-[#ee7b11] hover:bg-[#d66f0e] text-white font-extrabold text-xs rounded-xl flex items-center justify-center gap-1.5 transition pt-2"
-                >
-                  <Banknote className="h-4 w-4" />
-                  Valider l'Écrit de Caisse
-                </button>
-              </form>
-            </div>
+              <button 
+                type="submit"
+                className="cursor-pointer w-full py-2 bg-[#ee7b11] hover:bg-[#d66f0e] text-white font-extrabold text-xs rounded-xl flex items-center justify-center gap-1.5 transition pt-2"
+              >
+                <Banknote className="h-4 w-4" />
+                Valider l'Écrit de Caisse
+              </button>
+            </form>
+          </div>
 
-            {/* Installment details for selected student */}
-            {detailStudent && detailStudentBilling && (
-              <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs space-y-4">
-                <div className="border-b border-slate-100 pb-2 flex justify-between items-center">
-                  <h4 className="text-xs font-black uppercase text-slate-750">
-                    Échéancier de Versements : {detailStudent.lastName} {detailStudent.firstName}
-                  </h4>
-                  <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
-                    detailStudent.assignmentStatus === 'Affecté' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-900 text-white'
-                  }`}>
-                    {detailStudent.assignmentStatus === 'Affecté' ? 'Affecté' : 'Élève Privé'}
-                  </span>
-                </div>
+          {/* Installment details for selected student */}
+          {detailStudent && detailStudentBilling && (
+            <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs space-y-4">
+              <div className="border-b border-slate-100 pb-2 flex justify-between items-center">
+                <h4 className="text-xs font-black uppercase text-slate-755">
+                  Échéancier de Versements : {detailStudent.lastName} {detailStudent.firstName}
+                </h4>
+                <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
+                  detailStudent.assignmentStatus === 'Affecté' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-900 text-white'
+                }`}>
+                  {detailStudent.assignmentStatus === 'Affecté' ? 'Affecté' : 'Élève Privé'}
+                </span>
+              </div>
 
-                {detailStudent.assignmentStatus === 'Affecté' ? (
-                  <p className="text-xs text-slate-500 leading-normal italic bg-slate-50 p-3 rounded-xl border border-slate-200">
-                    Les élèves affectés par l'État bénéficient d'un tarif forfaitaire subventionné et ne sont pas soumis à l'échéancier des versements trimestriels privés.
-                  </p>
-                ) : detailStudentBilling.installments.length === 0 ? (
-                  <p className="text-xs text-slate-400 italic text-center py-4">Aucun versement planifié pour cette classe.</p>
-                ) : (
-                  <div className="space-y-3">
-                    {detailStudentBilling.installments.map((inst, idx) => (
-                      <div key={idx} className="p-3 bg-slate-50 border border-slate-150 rounded-xl space-y-2">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <span className="font-extrabold text-slate-800 text-xs block">{inst.label}</span>
-                            <span className="text-[10px] text-slate-450 font-bold block flex items-center gap-1">
-                              <Calendar className="h-3 w-3 text-slate-400" />
-                              Limite : {new Date(inst.dueDate).toLocaleDateString('fr-FR')}
-                            </span>
-                          </div>
-                          <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase ${
-                            inst.status === 'Payé' ? 'bg-emerald-100 text-emerald-800' :
-                            inst.status === 'Partiel' ? 'bg-amber-100 text-amber-800' :
-                            inst.status === 'En retard' ? 'bg-rose-105 text-rose-800 animate-pulse border border-rose-200' :
-                            'bg-slate-100 text-slate-500'
-                          }`}>
-                            {inst.status === 'Payé' ? 'Payé' :
-                             inst.status === 'Partiel' ? 'Partiel' :
-                             inst.status === 'En retard' ? 'En Retard ⚠️' :
-                             'En attente'}
+              {detailStudent.assignmentStatus === 'Affecté' ? (
+                <p className="text-xs text-slate-500 leading-normal italic bg-slate-50 p-3 rounded-xl border border-slate-200">
+                  Les élèves affectés par l'État bénéficient d'un tarif forfaitaire subventionné et ne sont pas soumis à l'échéancier des versements trimestriels privés.
+                </p>
+              ) : detailStudentBilling.installments.length === 0 ? (
+                <p className="text-xs text-slate-400 italic text-center py-4">Aucun versement planifié pour cette classe.</p>
+              ) : (
+                <div className="space-y-3">
+                  {detailStudentBilling.installments.map((inst, idx) => (
+                    <div key={idx} className="p-3 bg-slate-50 border border-slate-150 rounded-xl space-y-2">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <span className="font-extrabold text-slate-800 text-xs block">{inst.label}</span>
+                          <span className="text-[10px] text-slate-450 font-bold block flex items-center gap-1">
+                            <Calendar className="h-3 w-3 text-slate-400" />
+                            Limite : {new Date(inst.dueDate).toLocaleDateString('fr-FR')}
                           </span>
                         </div>
+                        <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase ${
+                          inst.status === 'Payé' ? 'bg-emerald-100 text-emerald-800' :
+                          inst.status === 'Partiel' ? 'bg-amber-100 text-amber-800' :
+                          inst.status === 'En retard' ? 'bg-rose-100 text-rose-800 animate-pulse border border-rose-200' :
+                          'bg-slate-100 text-slate-500'
+                        }`}>
+                          {inst.status === 'Payé' ? 'Payé' :
+                           inst.status === 'Partiel' ? 'Partiel' :
+                           inst.status === 'En retard' ? 'En Retard ⚠️' :
+                           'En attente'}
+                        </span>
+                      </div>
 
-                        <div className="flex justify-between text-[11px] font-mono border-t border-slate-200/60 pt-1.5">
-                          <div>
-                            <span className="text-slate-400 font-bold">Attendu : </span>
-                            <strong className="text-slate-850 font-black">{inst.discountedAmount.toLocaleString()} FCFA</strong>
-                          </div>
-                          <div>
-                            <span className="text-slate-400 font-bold">Payé : </span>
-                            <strong className="text-emerald-700 font-black">{inst.paidAmount.toLocaleString()} FCFA</strong>
-                          </div>
-                          <div>
-                            <span className="text-slate-400 font-bold">Reste : </span>
-                            <strong className={inst.remainingAmount > 0 ? "text-rose-700 font-black" : "text-slate-700 font-black"}>
-                              {inst.remainingAmount.toLocaleString()} FCFA
-                            </strong>
-                          </div>
+                      <div className="flex justify-between text-[11px] font-mono border-t border-slate-200/60 pt-1.5">
+                        <div>
+                          <span className="text-slate-400 font-bold">Attendu : </span>
+                          <strong className="text-slate-850 font-black">{inst.discountedAmount.toLocaleString()} FCFA</strong>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 font-bold">Payé : </span>
+                          <strong className="text-emerald-700 font-black">{inst.paidAmount.toLocaleString()} FCFA</strong>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 font-bold">Reste : </span>
+                          <strong className={inst.remainingAmount > 0 ? "text-rose-700 font-black" : "text-slate-700 font-black"}>
+                            {inst.remainingAmount.toLocaleString()} FCFA
+                          </strong>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Right student accounting directory (7 cols) */}
-          <div className="lg:col-span-7 bg-white border border-slate-200 rounded-3xl p-5 shadow-xs overflow-hidden space-y-4">
-            <div className="flex justify-between items-center">
-              <h3 className="text-sm font-black text-slate-905 uppercase tracking-tight">Dossier de Facturation Élèves ({studentList.length})</h3>
-              <span className="text-[10.5px] bg-slate-900 text-white px-2.5 py-0.5 rounded-full font-bold">Total Encaissé : {globalTotalCollected.toLocaleString()} FCFA</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-
-            <div className="overflow-x-auto rounded-xl border border-slate-150">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="bg-slate-50 text-slate-450 border-b border-slate-250 font-black">
-                    <th className="p-2.5">Matricule</th>
-                    <th className="p-2.5">Nom d'Élève</th>
-                    <th className="p-2.5">Classe</th>
-                    <th className="p-2.5 w-28 text-center">Type</th>
-                    <th className="p-2.5 text-right">Scolarité Dûe</th>
-                    <th className="p-2.5 text-right text-emerald-800">Payé</th>
-                    <th className="p-2.5 text-right text-red-750">Reste</th>
-                    <th className="p-2.5 text-center">Fiche</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {studentList.map(std => {
-                    const bill = getStudentBillingSheet(std.id, std.classId);
-                    const isSelectedDetail = selectedStudentIdForDetail === std.id;
-                    
-                    return (
-                      <tr 
-                        key={std.id} 
-                        onClick={() => setSelectedStudentIdForDetail(std.id)}
-                        className={`border-b border-slate-100 hover:bg-slate-50/50 transition cursor-pointer ${
-                          isSelectedDetail ? 'bg-indigo-50/40' : ''
-                        }`}
-                      >
-                        <td className="p-2.5 font-mono text-[#0b4998] font-bold">{std.matricule}</td>
-                        <td className="p-2.5 font-extrabold text-slate-850 uppercase leading-none">
-                          {std.lastName} {std.firstName}
-                        </td>
-                        <td className="p-2.5 font-bold text-slate-500">{std.classId}</td>
-                        <td className="p-2.5 text-center" onClick={(e) => e.stopPropagation()}>
-                          <select
-                            value={std.assignmentStatus || 'Non Affecté'}
-                            onChange={(e) => updateStudentAssignmentStatus(std.id, e.target.value as any)}
-                            className={`p-1 rounded text-[10px] font-black border uppercase cursor-pointer ${
-                              std.assignmentStatus === 'Affecté'
-                                ? 'bg-indigo-50 border-indigo-200 text-indigo-750'
-                                : 'bg-slate-50 border-slate-200 text-slate-700'
-                            }`}
-                          >
-                            <option value="Non Affecté">Privé</option>
-                            <option value="Affecté">État (Affecté)</option>
-                          </select>
-                        </td>
-                        <td className="p-2.5 text-right font-semibold font-mono">
-                          {bill.finalInvoiceDue.toLocaleString()} FCFA
-                        </td>
-                        <td className="p-2.5 text-right text-emerald-850 font-mono font-black">{bill.totalPaid.toLocaleString()} FCFA</td>
-                        <td className="p-2.5 text-right text-red-750 font-mono font-black">{bill.balanceRemaining.toLocaleString()} FCFA</td>
-                        <td className="p-2.5 text-center">
-                          <button 
-                            className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
-                              isSelectedDetail ? 'bg-[#0b4998] text-white' : 'bg-slate-100 text-slate-500'
-                            }`}
-                          >
-                            Détails
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
+          )}
         </div>
+
+        {/* Right student accounting directory (7 cols) */}
+        <div className="lg:col-span-7 bg-white border border-slate-200 rounded-3xl p-5 shadow-xs overflow-hidden space-y-4">
+          <div className="flex justify-between items-center">
+            <h3 className="text-sm font-black text-slate-905 uppercase tracking-tight">Dossier de Facturation Élèves ({studentList.length})</h3>
+            <span className="text-[10.5px] bg-slate-900 text-white px-2.5 py-0.5 rounded-full font-bold">Total Encaissé : {globalTotalCollected.toLocaleString()} FCFA</span>
+          </div>
+
+          <div className="overflow-x-auto rounded-xl border border-slate-150">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-slate-50 text-slate-450 border-b border-slate-250 font-black">
+                  <th className="p-2.5">Matricule</th>
+                  <th className="p-2.5">Nom d'Élève</th>
+                  <th className="p-2.5">Classe</th>
+                  <th className="p-2.5 w-28 text-center">Type</th>
+                  <th className="p-2.5 text-right">Scolarité Dûe</th>
+                  <th className="p-2.5 text-right text-emerald-800">Payé</th>
+                  <th className="p-2.5 text-right text-red-750">Reste</th>
+                  <th className="p-2.5 text-center">Fiche</th>
+                </tr>
+              </thead>
+              <tbody>
+                {studentList.map(std => {
+                  const bill = getStudentBillingSheet(std.id, std.classId);
+                  const isSelectedDetail = selectedStudentIdForDetail === std.id;
+                  
+                  return (
+                    <tr 
+                      key={std.id} 
+                      onClick={() => setSelectedStudentIdForDetail(std.id)}
+                      className={`border-b border-slate-100 hover:bg-slate-50/50 transition cursor-pointer ${
+                        isSelectedDetail ? 'bg-indigo-50/40' : ''
+                      }`}
+                    >
+                      <td className="p-2.5 font-mono text-[#0b4998] font-bold">{std.matricule}</td>
+                      <td className="p-2.5 font-extrabold text-slate-850 uppercase leading-none">
+                        {std.lastName} {std.firstName}
+                      </td>
+                      <td className="p-2.5 font-bold text-slate-500">{std.classId}</td>
+                      <td className="p-2.5 text-center" onClick={(e) => e.stopPropagation()}>
+                        <select
+                          value={std.assignmentStatus || 'Non Affecté'}
+                          onChange={(e) => updateStudentAssignmentStatus(std.id, e.target.value as any)}
+                          className={`p-1 rounded text-[10px] font-black border uppercase cursor-pointer ${
+                            std.assignmentStatus === 'Affecté'
+                              ? 'bg-indigo-50 border-indigo-200 text-indigo-750'
+                              : 'bg-slate-50 border-slate-200 text-slate-700'
+                          }`}
+                        >
+                          <option value="Non Affecté">Privé</option>
+                          <option value="Affecté">État (Affecté)</option>
+                        </select>
+                      </td>
+                      <td className="p-2.5 text-right font-semibold font-mono">
+                        {bill.finalInvoiceDue.toLocaleString()} FCFA
+                      </td>
+                      <td className="p-2.5 text-right text-emerald-850 font-mono font-black">{bill.totalPaid.toLocaleString()} FCFA</td>
+                      <td className="p-2.5 text-right text-red-750 font-mono font-black">{bill.balanceRemaining.toLocaleString()} FCFA</td>
+                      <td className="p-2.5 text-center">
+                        <button 
+                          className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
+                            isSelectedDetail ? 'bg-[#0b4998] text-white' : 'bg-slate-100 text-slate-500'
+                          }`}
+                        >
+                          Détails
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
       )}
 
       {/* RENDER VIEW: TRANSACTION LEDGER & PRINT RECEIPT */}
@@ -768,7 +864,7 @@ export default function FinancialModule({
                       <span className="text-[8px] font-bold text-slate-400 block uppercase">{schoolSubName}</span>
                     </div>
                     <div className="text-right">
-                      <span className="text-[10px] bg-slate-950 text-white px-2 py-0.5 rounded font-black font-mono">REÇU DE CAISSE</span>
+                      <span className="text-[10px] bg-slate-955 text-white px-2 py-0.5 rounded font-black font-mono">REÇU DE CAISSE</span>
                     </div>
                   </div>
 
@@ -964,7 +1060,7 @@ export default function FinancialModule({
                 return (
                   <div key={std.id} className="p-3 bg-slate-50 border border-slate-150 rounded-2xl flex items-center justify-between">
                     <div>
-                      <span className="text-xs font-black text-slate-900 uppercase block">{std.lastName} {std.firstName}</span>
+                      <span className="text-xs font-black text-slate-905 uppercase block">{std.lastName} {std.firstName}</span>
                       <span className="text-[10px] text-slate-455 font-bold block">
                         Classe : {std.classId} • Matricule : {std.matricule} • Statut : {std.assignmentStatus}
                       </span>
@@ -996,6 +1092,251 @@ export default function FinancialModule({
             </div>
           </div>
 
+        </div>
+      )}
+
+      {/* RENDER VIEW: REMINDERS AND ARREARS MANAGEMENT */}
+      {activeSubTab === 'reminders' && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          
+          {/* Left panel: scanned list of candidates with arrears (8 cols) */}
+          <div className="lg:col-span-8 bg-white border border-slate-200 rounded-3xl p-5 shadow-xs space-y-4">
+            <div className="border-b border-slate-100 pb-2">
+              <h3 className="text-sm font-black text-slate-900 uppercase">
+                Scanner des Impayés & Échéances Proches (Sous 7 Jours)
+              </h3>
+              <p className="text-[10.5px] text-slate-450 mt-0.5">
+                Le système analyse en continu l'échéancier des tranches non soldées de tous les élèves privés.
+              </p>
+            </div>
+
+            {scannerList.length === 0 ? (
+              <p className="text-xs text-slate-450 italic text-center py-8 bg-slate-50 border border-dashed rounded-xl">
+                ✓ Aucun retard de paiement détecté. Tous les élèves privés sont à jour de leurs tranches actives !
+              </p>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-slate-200">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-slate-50 text-slate-500 border-b border-slate-200 font-bold">
+                      <th className="p-2.5">Élève (Classe)</th>
+                      <th className="p-2.5">Tranche Concernée</th>
+                      <th className="p-2.5 text-center">Échéance</th>
+                      <th className="p-2.5 text-right">Reste dû</th>
+                      <th className="p-2.5 text-center">Statut / Retard</th>
+                      <th className="p-2.5 text-center">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {scannerList.map((item, idx) => (
+                      <tr 
+                        key={idx} 
+                        onClick={() => setSelectedReminderStudentId(item.studentId)}
+                        className={`border-b border-slate-100 hover:bg-slate-50 transition cursor-pointer ${
+                          selectedReminderStudentId === item.studentId ? 'bg-indigo-50/40' : ''
+                        }`}
+                      >
+                        <td className="p-2.5">
+                          <strong className="text-slate-800 uppercase block">{item.studentName}</strong>
+                          <span className="text-[9.5px] text-slate-450 block font-mono">Mat: {item.matricule} • Cl: {item.classId}</span>
+                        </td>
+                        <td className="p-2.5 font-semibold text-slate-600">{item.installmentLabel}</td>
+                        <td className="p-2.5 text-center font-mono text-slate-550">
+                          {new Date(item.dueDate).toLocaleDateString('fr-FR')}
+                        </td>
+                        <td className="p-2.5 text-right font-black font-mono text-rose-700">
+                          {item.remainingAmount.toLocaleString()} FCFA
+                        </td>
+                        <td className="p-2.5 text-center">
+                          {item.daysRemaining < 0 ? (
+                            <span className="px-2 py-0.5 bg-rose-50 text-rose-700 border border-rose-100 rounded-full text-[9px] font-black uppercase">
+                              Dépassé ({Math.abs(item.daysRemaining)} j)
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-100 rounded-full text-[9px] font-black uppercase">
+                              Rappel ({item.daysRemaining} j)
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-2.5 text-center">
+                          <button className="px-2 py-1 bg-slate-900 text-white rounded text-[10px] font-bold">
+                            Relancer
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Right panel: Reminder Template & Delivery Action (4 cols) */}
+          <div className="lg:col-span-4 space-y-6">
+            
+            {activeReminderItem ? (
+              <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs space-y-4">
+                <div className="border-b border-slate-100 pb-2">
+                  <h4 className="text-xs font-black uppercase text-slate-700">Fiche de Relance Destinataire</h4>
+                </div>
+
+                <div className="p-3 bg-slate-50 border border-slate-150 rounded-xl space-y-2 text-xs">
+                  <div>
+                    <span className="text-slate-450 font-bold block uppercase text-[9px]">Tuteur / Parent d'élève :</span>
+                    <strong className="text-slate-800 font-extrabold">{activeReminderItem.tutorName}</strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-450 font-bold block uppercase text-[9px]">Téléphone Tuteur :</span>
+                    <strong className="text-indigo-800 font-mono font-black">{activeReminderItem.tutorPhone}</strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-455 font-bold block uppercase text-[9px]">Solde en souffrance :</span>
+                    <strong className="text-rose-700 font-mono font-black">{activeReminderItem.remainingAmount.toLocaleString()} FCFA</strong>
+                  </div>
+                </div>
+
+                {/* Message preview editor */}
+                <div className="space-y-1.5">
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase">Message de relance (SMS / WhatsApp)</label>
+                  <textarea 
+                    value={getReminderTemplateMessage(activeReminderItem)}
+                    readOnly
+                    className="w-full h-32 p-2 border border-slate-250 bg-slate-50 rounded-xl text-xs font-semibold text-slate-700 leading-relaxed focus:outline-none"
+                  />
+                </div>
+
+                {/* Manual Reminder Channels */}
+                <div className="space-y-2">
+                  <span className="text-[9px] font-black uppercase text-slate-450 tracking-wider block">Canaux d'envoi & Traçabilité</span>
+                  
+                  <div className="grid grid-cols-2 gap-2">
+                    {/* SMS */}
+                    <button
+                      onClick={() => handleSendReminderLog(activeReminderItem.studentId, 'SMS', getReminderTemplateMessage(activeReminderItem))}
+                      className="cursor-pointer h-9 bg-slate-900 hover:bg-slate-800 text-white text-[10.5px] font-bold rounded-lg transition flex items-center justify-center gap-1 shadow-xs"
+                    >
+                      <Send className="h-3.5 w-3.5 text-sky-400" />
+                      <span>Relancer SMS</span>
+                    </button>
+
+                    {/* WhatsApp */}
+                    <button
+                      onClick={() => {
+                        handleSendReminderLog(activeReminderItem.studentId, 'WhatsApp', getReminderTemplateMessage(activeReminderItem));
+                        const formattedText = encodeURIComponent(getReminderTemplateMessage(activeReminderItem));
+                        const cleanPhone = activeReminderItem.tutorPhone.replace(/[\s+]/g, '');
+                        window.open(`https://wa.me/${cleanPhone}?text=${formattedText}`, '_blank');
+                      }}
+                      className="cursor-pointer h-9 bg-emerald-600 hover:bg-emerald-700 text-white text-[10.5px] font-bold rounded-lg transition flex items-center justify-center gap-1 shadow-xs"
+                    >
+                      <MessageSquare className="h-3.5 w-3.5 text-white" />
+                      <span>Relancer WA</span>
+                    </button>
+                  </div>
+
+                  {/* Print A4 reminder letter button */}
+                  <button
+                    onClick={() => {
+                      handleSendReminderLog(activeReminderItem.studentId, 'Courrier A4', getReminderTemplateMessage(activeReminderItem));
+                      window.print();
+                    }}
+                    className="cursor-pointer h-9 w-full bg-[#ee7b11] hover:bg-[#d66f0e] text-white text-xs font-black uppercase rounded-lg transition flex items-center justify-center gap-1.5 shadow-sm"
+                  >
+                    <Printer className="h-4 w-4" />
+                    <span>Lettre A4 Officielle</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs text-center text-slate-400 italic py-8">
+                Cliquez sur un élève de la liste de gauche pour configurer son message de relance et lancer les notifications.
+              </div>
+            )}
+
+            {/* Reminder History Log */}
+            <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs space-y-3">
+              <h4 className="text-xs font-black uppercase text-slate-700 border-b border-slate-100 pb-1.5">Historique des Relances</h4>
+              {reminderLogs.length === 0 ? (
+                <p className="text-[10px] text-slate-400 italic text-center py-2">Aucune relance effectuée durant cette session.</p>
+              ) : (
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {reminderLogs.map(log => (
+                    <div key={log.id} className="p-2 border border-slate-100 bg-[#dfecf8]/10 rounded-lg text-[10px]">
+                      <div className="flex justify-between font-bold">
+                        <span className="text-slate-800 uppercase">{log.studentName}</span>
+                        <span className="text-indigo-700">{log.method}</span>
+                      </div>
+                      <div className="text-slate-450 mt-0.5">{log.sentAt}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+          </div>
+
+        </div>
+      )}
+
+      {/* RENDER DOCKED PRINTABLE A4 REMINDER CONVOCATION IF PRINT ACTION TRIGGERED */}
+      {activeReminderItem && (
+        <div className="hidden print:block fixed inset-0 bg-white z-9999 text-slate-900 p-12 font-serif text-sm leading-relaxed select-none">
+          {/* Header */}
+          <div className="text-center border-b pb-4 mb-8">
+            <h1 className="text-lg font-bold uppercase tracking-tight text-slate-950">{schoolName}</h1>
+            <p className="text-[10px] uppercase font-bold tracking-widest text-slate-500 mt-1">{schoolSubName}</p>
+            <p className="text-[9px] italic text-slate-400 mt-0.5">"{schoolMotto}"</p>
+            <div className="text-[10px] font-mono mt-2 text-slate-500">Année Académique : {academicYear}</div>
+          </div>
+
+          {/* Letter Body */}
+          <div className="space-y-6 pt-4">
+            <div className="text-right">
+              <p>Fait à Abidjan, le {new Date().toLocaleDateString('fr-FR')}</p>
+            </div>
+
+            <div>
+              <p className="font-bold">À l'attention de M./Mme {activeReminderItem.tutorName},</p>
+              <p className="italic">Parent / Tuteur de l'élève {activeReminderItem.studentName} ({activeReminderItem.classId})</p>
+              <p className="text-xs">Contact : {activeReminderItem.tutorPhone}</p>
+            </div>
+
+            <div className="pt-2">
+              <p className="font-bold underline uppercase">Objet : Lettre de Rappel et de Mise en Demeure pour Scolarité</p>
+            </div>
+
+            <div className="space-y-4">
+              <p>Madame, Monsieur,</p>
+              <p>
+                Sauf erreur de notre part, nous attirons votre aimable attention sur le fait que la scolarité de votre enfant <strong>{activeReminderItem.studentName}</strong>, inscrit en classe de <strong>{activeReminderItem.classId}</strong> (Matricule : {activeReminderItem.matricule}), présente un retard de paiement.
+              </p>
+              <p>
+                En effet, le versement de la tranche <strong>"{activeReminderItem.installmentLabel}"</strong> d'un montant de <strong>{activeReminderItem.dueAmount.toLocaleString()} FCFA</strong>, dont la date limite était fixée au <strong>{new Date(activeReminderItem.dueDate).toLocaleDateString('fr-FR')}</strong>, n'a pas été intégralement régularisé à ce jour. Le solde restant dû pour cette tranche s'élève actuellement à :
+              </p>
+              
+              <div className="my-6 p-4 border bg-slate-50 rounded-xl text-center">
+                <span className="text-xs font-bold text-slate-500 uppercase block tracking-wider">Montant restant dû</span>
+                <strong className="text-2xl font-black text-slate-900 font-mono">{activeReminderItem.remainingAmount.toLocaleString()} FCFA</strong>
+              </div>
+
+              <p>
+                Nous vous prions de bien vouloir régulariser cette situation auprès du secrétariat ou du bureau de la caisse de l'établissement sous huitaine. L'éducation de votre enfant dépend de votre ponctualité, qui est indispensable au bon fonctionnement et à la logistique de notre école.
+              </p>
+              <p>
+                Si votre règlement a été effectué entre-temps, veuillez ne pas tenir compte de la présente lettre.
+              </p>
+              <p>Nous vous remercions de votre collaboration habituelle et vous prions d'agréer, Madame, Monsieur, nos salutations distinguées.</p>
+            </div>
+
+            {/* Signature */}
+            <div className="pt-10 flex justify-between items-center text-xs">
+              <span className="italic text-slate-400">Copie : Direction Générale</span>
+              <div className="text-center font-bold">
+                <p className="underline uppercase">Le Directeur Général</p>
+                <p className="mt-8 font-black uppercase text-slate-950">{schoolDirector}</p>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
