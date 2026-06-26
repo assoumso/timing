@@ -3,6 +3,7 @@ export interface ClassItem {
   name: string;
   capacity: number;
   color: string;
+  mainTeacherId?: string; // ID du Professeur Principal
 }
 
 export interface TeacherItem {
@@ -19,6 +20,8 @@ export interface SubjectItem {
   id: string;
   name: string;
   color: string;
+  coefficient?: number; // Coefficient de la matière
+  isLV2?: boolean; // Indique s'il s'agit d'une matière optionnelle de type Langue Vivante 2
 }
 
 export interface RoomItem {
@@ -98,6 +101,8 @@ export interface UserAccount {
   password?: string;
   role: 'super_admin' | 'director' | 'accountant' | 'supervisor' | 'teacher' | 'parent' | 'student';
   createdAt?: string;
+  teacherId?: string;
+  allowedTabs?: string[];
 }
 
 

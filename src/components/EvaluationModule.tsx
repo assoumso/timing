@@ -9,18 +9,23 @@ import {
   Printer, 
   GraduationCap, 
   UserCheck, 
-  PieChart 
+  PieChart,
+  Layers,
+  FileText 
 } from 'lucide-react';
-import { ClassItem, SubjectItem } from '../types';
+import { ClassItem, SubjectItem, TeacherItem } from '../types';
 
 interface EvaluationModuleProps {
   classes: ClassItem[];
   subjects: SubjectItem[];
+  teachers: TeacherItem[];
   schoolName: string;
   schoolSubName: string;
   schoolMotto: string;
   academicYear: string;
   schoolDirector: string;
+  marks: StudentMark[];
+  setMarks: React.Dispatch<React.SetStateAction<StudentMark[]>>;
 }
 
 interface StudentMark {
@@ -37,41 +42,16 @@ interface StudentMark {
 export default function EvaluationModule({
   classes,
   subjects,
+  teachers,
   schoolName,
   schoolSubName,
   schoolMotto,
   academicYear,
-  schoolDirector
+  schoolDirector,
+  marks,
+  setMarks
 }: EvaluationModuleProps) {
   
-  // Persistent marks base
-  const [marks, setMarks] = useState<StudentMark[]>(() => {
-    const saved = localStorage.getItem('erp_student_marks');
-    if (saved) return JSON.parse(saved);
-    // dense realistic pre-populated data for computation demos
-    return [
-      // Koffi Yao (std_1) - 6A: Math 15, French 14, PC 16
-      { id: 'mk_1', studentId: 'std_1', classId: '6A', subjectId: 'math', examName: 'Devoir Surveillé 1', weight: 1, score: 14.5, recordedAt: '2026-06-01' },
-      { id: 'mk_2', studentId: 'std_1', classId: '6A', subjectId: 'math', examName: 'Examen Trimestre', weight: 2, score: 16.0, recordedAt: '2026-06-15' },
-      { id: 'mk_3', studentId: 'std_1', classId: '6A', subjectId: 'fr', examName: 'Composition Française', weight: 2, score: 13.5, recordedAt: '2026-06-12' },
-      { id: 'mk_4', studentId: 'std_1', classId: '6A', subjectId: 'pc', examName: 'Devoir Labo 1', weight: 1, score: 17.0, recordedAt: '2026-06-08' },
-
-      // Diomandé Aminata (std_2) - 6B: Math 11, French 16
-      { id: 'mk_5', studentId: 'std_2', classId: '6B', subjectId: 'math', examName: 'Examen Trimestre', weight: 2, score: 11.0, recordedAt: '2026-06-15' },
-      { id: 'mk_6', studentId: 'std_2', classId: '6B', subjectId: 'fr', examName: 'Composition Française', weight: 2, score: 16.5, recordedAt: '2026-06-12' },
-
-      // Kouassi Charles (std_3) - 3A: Math 18, French 11, PC 15
-      { id: 'mk_7', studentId: 'std_3', classId: '3A', subjectId: 'math', examName: 'Examen National blanc', weight: 3, score: 18.5, recordedAt: '2026-06-14' },
-      { id: 'mk_8', studentId: 'std_3', classId: '3A', subjectId: 'fr', examName: 'Devoir Surveillé', weight: 1, score: 11.0, recordedAt: '2026-06-12' },
-      { id: 'mk_9', studentId: 'std_3', classId: '3A', subjectId: 'pc', examName: 'Devoir Labo 1', weight: 1, score: 15.5, recordedAt: '2026-06-05' },
-
-      // Gomez Marie-Chantal (std_5) - 3A: Math 13, French 17, PC 14
-      { id: 'mk_10', studentId: 'std_5', classId: '3A', subjectId: 'math', examName: 'Examen National blanc', weight: 3, score: 13.0, recordedAt: '2026-06-14' },
-      { id: 'mk_11', studentId: 'std_5', classId: '3A', subjectId: 'fr', examName: 'Devoir Surveillé', weight: 1, score: 17.5, recordedAt: '2026-06-12' },
-      { id: 'mk_12', studentId: 'std_5', classId: '3A', subjectId: 'pc', examName: 'Devoir Labo 1', weight: 1, score: 14.0, recordedAt: '2026-06-05' }
-    ];
-  });
-
   // Resolve students list dynamically from localStorage
   const [studentList, setStudentList] = useState<any[]>([]);
   useEffect(() => {
@@ -90,17 +70,23 @@ export default function EvaluationModule({
     }
   }, [marks]); // reload if marks list changed or during render
 
-  // Save changes
-  useEffect(() => {
-    localStorage.setItem('erp_student_marks', JSON.stringify(marks));
-  }, [marks]);
-
   // View state
-  const [activeSubTab, setActiveSubTab] = useState<'input' | 'reports' | 'statistics'>('input');
+  const [activeSubTab, setActiveSubTab] = useState<'input' | 'reports' | 'statistics' | 'natte' | 'pv_validation'>('input');
   
   // Selection filtering for computing bulletins
   const [bulletinClassId, setBulletinClassId] = useState('6A');
   const [selectedStudentBulletin, setSelectedStudentBulletin] = useState<string>('std_1');
+
+  // Validated PVs per class list state (saves to localstorage)
+  const [validatedPVs, setValidatedPVs] = useState<string[]>(() => {
+    const saved = localStorage.getItem('barakat_validated_pvs');
+    if (saved) return JSON.parse(saved);
+    return [];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('barakat_validated_pvs', JSON.stringify(validatedPVs));
+  }, [validatedPVs]);
 
   // Input forms state
   const [inputForm, setInputForm] = useState({
@@ -157,27 +143,34 @@ export default function EvaluationModule({
 
   // Math engines to calculate grade bulletins
   const getStudentGradesReport = (studentId: string) => {
+    const student = studentList.find(s => s.id === studentId);
     const studentMarks = marks.filter(m => m.studentId === studentId);
     
     // For each subject, compute weighted average
-    const reportList = subjects.map(sub => {
-      const subMarks = studentMarks.filter(m => m.subjectId === sub.id);
-      let totalPoints = 0;
-      let totalCoefficients = 0;
+    const reportList = subjects
+      .filter(sub => {
+        if (!sub.isLV2) return true;
+        if (!student?.lv2 || student.lv2 === 'Aucun') return false;
+        return sub.name.toLowerCase().includes(student.lv2.toLowerCase());
+      })
+      .map(sub => {
+        const subMarks = studentMarks.filter(m => m.subjectId === sub.id);
+        let totalPoints = 0;
+        let totalCoefficients = 0;
 
-      subMarks.forEach(m => {
-        totalPoints += m.score * m.weight;
-        totalCoefficients += m.weight;
+        subMarks.forEach(m => {
+          totalPoints += m.score * m.weight;
+          totalCoefficients += m.weight;
+        });
+
+        const average = totalCoefficients > 0 ? parseFloat((totalPoints / totalCoefficients).toFixed(2)) : null;
+        return {
+          subject: sub,
+          marksList: subMarks,
+          average,
+          totalCoefficients
+        };
       });
-
-      const average = totalCoefficients > 0 ? parseFloat((totalPoints / totalCoefficients).toFixed(2)) : null;
-      return {
-        subject: sub,
-        marksList: subMarks,
-        average,
-        totalCoefficients
-      };
-    });
 
     // Compute overall weighted average (averages of each valid subject)
     let overallNumerator = 0;
@@ -185,9 +178,9 @@ export default function EvaluationModule({
 
     reportList.forEach(r => {
       if (r.average !== null) {
-        // Here we just use coefficient 2 as a baseline or resolve from the administration coefficients if required, let's keep it simple: equal weight coefficient 2
-        overallNumerator += r.average * 2;
-        overallDenominator += 2;
+        const coef = r.subject.coefficient || 1;
+        overallNumerator += r.average * coef;
+        overallDenominator += coef;
       }
     });
 
@@ -240,7 +233,7 @@ export default function EvaluationModule({
           </p>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button 
             onClick={() => setActiveSubTab('input')}
             className={`cursor-pointer px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
@@ -249,6 +242,24 @@ export default function EvaluationModule({
           >
             <Target className="h-4 w-4" />
             Enregistrement des Notes
+          </button>
+          <button 
+            onClick={() => setActiveSubTab('natte')}
+            className={`cursor-pointer px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+              activeSubTab === 'natte' ? 'bg-[#0b4998] text-white shadow-xs' : 'bg-white text-slate-600 border border-slate-200'
+            }`}
+          >
+            <Layers className="h-4 w-4" />
+            Natte de Notes
+          </button>
+          <button 
+            onClick={() => setActiveSubTab('pv_validation')}
+            className={`cursor-pointer px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+              activeSubTab === 'pv_validation' ? 'bg-[#0b4998] text-white shadow-xs' : 'bg-white text-slate-600 border border-slate-200'
+            }`}
+          >
+            <FileText className="h-4 w-4" />
+            Procès-Verbaux & Validation
           </button>
           <button 
             onClick={() => setActiveSubTab('reports')}
@@ -404,6 +415,297 @@ export default function EvaluationModule({
         </div>
       )}
 
+      {/* RENDER VIEW: NATTE DE NOTES */}
+      {activeSubTab === 'natte' && (
+        <div className="space-y-6">
+          <div className="bg-white border border-slate-200 p-4 rounded-3xl flex flex-wrap gap-3 items-center justify-between shadow-xs">
+            <div>
+              <h3 className="text-sm font-bold text-slate-800">Natte de Notes (Grille d'Audit des Moyennes)</h3>
+              <p className="text-[11px] text-slate-500">Visualisez et vérifiez l'ensemble des moyennes calculées avant la validation du Procès-Verbal de Conseil.</p>
+            </div>
+            <select
+              value={bulletinClassId}
+              onChange={(e) => setBulletinClassId(e.target.value)}
+              className="bg-slate-50 border border-slate-200 rounded-xl p-1.5 text-xs font-bold text-slate-705"
+            >
+              {classes.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-xs">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase text-[9.5px]">
+                    <th className="p-3">Matricule</th>
+                    <th className="p-3">Nom & Prénoms</th>
+                    {subjects.map(sub => (
+                      <th key={sub.id} className="p-3 text-center border-l border-slate-100 min-w-[90px]" title={sub.name}>
+                        {sub.name} <br />
+                        <span className="text-[8px] text-slate-450 uppercase font-mono tracking-wider font-semibold">Coef {sub.coefficient || 1}</span>
+                      </th>
+                    ))}
+                    <th className="p-3 text-center bg-indigo-50 border-l border-indigo-100 text-indigo-805">Moy. Générale</th>
+                    <th className="p-3 text-center bg-indigo-50 text-indigo-805">Rang</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {currentClassStudents.map(std => {
+                    const report = getStudentGradesReport(std.id);
+                    const rankObj = rankings.find(r => r.student.id === std.id);
+                    
+                    return (
+                      <tr key={std.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition">
+                        <td className="p-3 font-mono font-bold text-[#0b4998]">{std.matricule}</td>
+                        <td className="p-3 font-bold text-slate-800">{std.lastName} {std.firstName}</td>
+                        {subjects.map(sub => {
+                          const subData = report.subjectsData.find(s => s.subject.id === sub.id);
+                          
+                          if (!subData) {
+                            return (
+                              <td key={sub.id} className="p-3 text-center text-slate-300 bg-slate-50/40 font-semibold border-l border-slate-100">
+                                N/A
+                              </td>
+                            );
+                          }
+
+                          return (
+                            <td 
+                              key={sub.id} 
+                              className={`p-3 text-center font-black border-l border-slate-100 ${
+                                subData.average === null ? 'text-slate-400 font-normal italic' : 
+                                subData.average >= 10 ? 'text-emerald-700 bg-emerald-50/10' : 'text-red-600 bg-red-50/10'
+                              }`}
+                            >
+                              {subData.average !== null ? subData.average.toFixed(2) : '-'}
+                            </td>
+                          );
+                        })}
+                        <td className="p-3 text-center font-black text-indigo-900 bg-indigo-50/30 border-l border-indigo-100 text-xs font-mono">
+                          {report.finalWeightedAverage.toFixed(2)}
+                        </td>
+                        <td className="p-3 text-center font-black text-[#0b4998] bg-indigo-50/30 text-xs font-mono">
+                          {rankObj && rankObj.hasGrades ? `${rankObj.rank}e` : '-'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {currentClassStudents.length === 0 && (
+                    <tr>
+                      <td colSpan={subjects.length + 4} className="p-8 text-center text-slate-400 font-semibold italic">
+                        Aucun élève inscrit dans cette classe.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* RENDER VIEW: PROCES-VERBAUX & VALIDATION */}
+      {activeSubTab === 'pv_validation' && (
+        <div className="space-y-6">
+          <div className="bg-white border border-slate-200 p-5 rounded-3xl flex flex-wrap gap-4 items-center justify-between shadow-xs">
+            <div>
+              <h3 className="text-base font-bold text-slate-900">Procès-Verbaux de Conseils de Classe</h3>
+              <p className="text-xs text-slate-500 font-medium">Consultez les PV de fin de période et validez-les pour rendre les bulletins disponibles.</p>
+            </div>
+            
+            <div className="flex gap-2">
+              <select
+                value={bulletinClassId}
+                onChange={(e) => setBulletinClassId(e.target.value)}
+                className="bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs font-bold text-slate-700 focus:outline-none"
+              >
+                {classes.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {(() => {
+            const classItem = classes.find(c => c.id === bulletinClassId);
+            const mainTeacher = classItem?.mainTeacherId ? teachers.find(t => t.id === classItem.mainTeacherId) : null;
+            const isPVValidated = validatedPVs.includes(bulletinClassId);
+
+            const studentsWithGrades = rankings.filter(r => r.hasGrades);
+            const averageSum = studentsWithGrades.reduce((sum, r) => sum + r.overallAverage, 0);
+            const classAverage = studentsWithGrades.length > 0 ? parseFloat((averageSum / studentsWithGrades.length).toFixed(2)) : 0;
+            const successCount = studentsWithGrades.filter(r => r.overallAverage >= 10).length;
+            const successRate = studentsWithGrades.length > 0 ? parseFloat(((successCount / studentsWithGrades.length) * 100).toFixed(1)) : 0;
+            const highestAverage = studentsWithGrades.length > 0 ? Math.max(...studentsWithGrades.map(r => r.overallAverage)) : 0;
+            const lowestAverage = studentsWithGrades.length > 0 ? Math.min(...studentsWithGrades.map(r => r.overallAverage)) : 0;
+
+            return (
+              <div className="space-y-6">
+                {/* Status and Action banner */}
+                <div className={`p-5 rounded-3xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition shadow-xs ${
+                  isPVValidated 
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-800' 
+                    : 'bg-amber-50 border-amber-200 text-amber-800'
+                }`}>
+                  <div className="flex items-start gap-3">
+                    <div className={`h-10 w-10 rounded-full flex items-center justify-center text-lg ${isPVValidated ? 'bg-emerald-100' : 'bg-amber-100'}`}>
+                      {isPVValidated ? '🛡️' : '⏳'}
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-black uppercase tracking-wide">
+                        Statut : {isPVValidated ? 'Validé & Scellé' : 'En attente de validation'}
+                      </h4>
+                      <p className="text-xs opacity-90 mt-0.5 leading-relaxed">
+                        {isPVValidated 
+                          ? 'Le PV est validé par la direction. Les bulletins individuels de cette classe sont maintenant disponibles en téléchargement et impression.' 
+                          : 'Le PV de conseil de classe doit être validé par la direction scolaire afin de libérer les bulletins individuels.'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    {isPVValidated ? (
+                      <button
+                        onClick={() => {
+                          if (window.confirm("Voulez-vous ré-ouvrir (dévalider) le PV de cette classe ? Les bulletins seront de nouveau inaccessibles aux parents et aux élèves.")) {
+                            setValidatedPVs(prev => prev.filter(id => id !== bulletinClassId));
+                          }
+                        }}
+                        className="cursor-pointer px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl transition shadow-xs"
+                      >
+                        Annuler la validation (Réouvrir)
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setValidatedPVs(prev => [...prev, bulletinClassId]);
+                          alert(`Le Procès-Verbal de la classe ${classItem?.name} a été validé et scellé avec succès ! Les bulletins de notes sont désormais disponibles.`);
+                        }}
+                        className="cursor-pointer px-4 py-2 bg-emerald-605 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center gap-1.5"
+                      >
+                        <Check className="h-4 w-4" />
+                        Valider & Signer le PV
+                      </button>
+                    )}
+                    <button
+                      onClick={() => window.print()}
+                      className="cursor-pointer px-3.5 py-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-bold rounded-xl transition flex items-center gap-1"
+                    >
+                      <Printer className="h-3.5 w-3.5" />
+                      Imprimer le PV
+                    </button>
+                  </div>
+                </div>
+
+                {/* Formal printable PV Sheet layout */}
+                <div id="formal-pv-sheet" className="max-w-3xl mx-auto bg-white border border-slate-350 p-8 shadow-xl font-sans text-slate-800 space-y-6">
+                  
+                  {/* Header part */}
+                  <div className="grid grid-cols-2 pb-3 border-b-2 border-slate-900 text-xs items-center">
+                    <div>
+                      <h4 className="font-black text-xs text-[#0b4998] uppercase leading-none">{schoolName}</h4>
+                      <span className="text-[9px] font-bold text-slate-400 block pb-1 border-b border-dotted max-w-[170px] uppercase leading-none">{schoolSubName}</span>
+                      <span className="text-[8.5px] italic text-[#ee7b11] font-semibold block leading-normal mt-0.5">"{schoolMotto}"</span>
+                    </div>
+                    <div className="text-right space-y-0.5">
+                      <span className="font-black text-sm uppercase block">Procès-Verbal de Conseil de Classe</span>
+                      <span className="font-semibold text-slate-500">Année Académique : {academicYear}</span>
+                    </div>
+                  </div>
+
+                  {/* Metadata and Context */}
+                  <div className="grid grid-cols-2 gap-4 text-xs bg-slate-50 p-4 border border-slate-200 rounded-2xl">
+                    <div className="space-y-1">
+                      <div><span className="font-bold text-slate-500 uppercase text-[9px]">Classe :</span> <strong className="text-slate-800 text-sm">{classItem?.name || bulletinClassId}</strong></div>
+                      <div><span className="font-bold text-slate-500 uppercase text-[9px]">Professeur Principal :</span> <strong>{mainTeacher?.name || 'Non Assigné'}</strong></div>
+                      <div><span className="font-bold text-slate-500 uppercase text-[9px]">Effectif de la classe :</span> <strong>{currentClassStudents.length} élèves</strong></div>
+                    </div>
+                    <div className="space-y-1">
+                      <div><span className="font-bold text-slate-500 uppercase text-[9px]">Moyenne Générale :</span> <strong>{classAverage.toFixed(2)} / 20</strong></div>
+                      <div><span className="font-bold text-slate-500 uppercase text-[9px]">Taux de Réussite :</span> <strong className="text-emerald-700">{successRate}% (Moy &ge; 10/20)</strong></div>
+                      <div><span className="font-bold text-slate-500 uppercase text-[9px]">Moyennes Extrêmes :</span> <strong>Min: {lowestAverage.toFixed(2)} | Max: {highestAverage.toFixed(2)}</strong></div>
+                    </div>
+                  </div>
+
+                  {/* Class Rankings table */}
+                  <div className="border border-slate-200 rounded-xl overflow-hidden text-xs">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-800 text-white font-bold uppercase text-[9px] tracking-wider">
+                          <th className="p-2.5 text-center w-12">Rang</th>
+                          <th className="p-2.5">Matricule</th>
+                          <th className="p-2.5">Nom & Prénoms</th>
+                          <th className="p-2.5 text-center w-24">Moyenne Générale</th>
+                          <th className="p-2.5">Décision / Mention du Conseil</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rankings.map((r, idx) => (
+                          <tr key={r.student.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition">
+                            <td className="p-2 text-center font-black text-slate-700 bg-slate-50/70">{r.hasGrades ? `${r.rank}e` : '-'}</td>
+                            <td className="p-2 font-mono text-slate-500">{r.student.matricule}</td>
+                            <td className="p-2 font-bold text-slate-800">{r.student.lastName} {r.student.firstName}</td>
+                            <td className="p-2 text-center font-black text-[#0b4998] font-mono bg-indigo-50/20">
+                              {r.hasGrades ? r.overallAverage.toFixed(2) : 'A.N.'}
+                            </td>
+                            <td className="p-2">
+                              {r.hasGrades ? (
+                                <span className={`text-[10px] font-bold ${
+                                  r.overallAverage >= 14 ? 'text-emerald-700' :
+                                  r.overallAverage >= 10 ? 'text-indigo-700' :
+                                  'text-red-600'
+                                }`}>
+                                  {r.overallAverage >= 14 ? 'Admis(e) avec Félicitations' :
+                                   r.overallAverage >= 10 ? 'Admis(e) avec Tableau d\'Honneur' :
+                                   'Avertissement de travail / Blâme'}
+                                </span>
+                              ) : (
+                                <span className="text-[10px] text-slate-400 italic font-semibold">Aucune note enregistrée</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                        {rankings.length === 0 && (
+                          <tr>
+                            <td colSpan={5} className="p-8 text-center text-slate-400 font-semibold italic">
+                              Aucun élève à classer.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Signatures footer */}
+                  <div className="pt-8 grid grid-cols-2 text-xs items-start font-sans">
+                    <div className="space-y-1">
+                      <span className="font-bold underline uppercase">Le Professeur Principal</span>
+                      <div className="h-16 flex items-end">
+                        <span className="text-slate-500 font-bold text-[10px]">{mainTeacher?.name || 'Nom du Professeur Principal'}</span>
+                      </div>
+                    </div>
+                    <div className="text-right space-y-1">
+                      <span className="font-bold uppercase block underline">Le Directeur des Études</span>
+                      <div className="h-16 flex flex-col justify-end items-end">
+                        {isPVValidated && (
+                          <span className="text-emerald-700 font-black uppercase text-[10.5px] border border-emerald-350 bg-emerald-50 px-2 py-0.5 rounded-lg mb-1 inline-block tracking-widest font-mono">
+                            PV VALIDÉ & SIGNÉ
+                          </span>
+                        )}
+                        <span className="font-extrabold text-slate-900 leading-none">{schoolDirector}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
       {/* RENDER VIEW: REPORTS CARD & CLASS BULLETINS */}
       {activeSubTab === 'reports' && (
         <div className="space-y-6">
@@ -442,15 +744,40 @@ export default function EvaluationModule({
 
             <button 
               onClick={() => window.print()}
-              className="cursor-pointer px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl flex items-center gap-1 transition shadow-sm"
+              disabled={!validatedPVs.includes(bulletinClassId)}
+              className={`cursor-pointer px-4 py-1.5 font-black text-xs rounded-xl flex items-center gap-1 transition shadow-sm ${
+                validatedPVs.includes(bulletinClassId)
+                  ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                  : "bg-slate-200 text-slate-450 cursor-not-allowed"
+              }`}
             >
               <Printer className="h-3.5 w-3.5" />
               Imprimer le Bulletin Trimestriel
             </button>
           </div>
 
-          {/* HTML formal printable bulletin sheet styled identically to school standards */}
-          <div className="max-w-3xl mx-auto bg-white border border-slate-300 p-6 text-slate-900 shadow-xl font-sans min-h-[580px] space-y-5">
+          {!validatedPVs.includes(bulletinClassId) ? (
+            <div className="max-w-xl mx-auto bg-amber-50/50 border border-amber-200 p-8 rounded-3xl text-center space-y-4 shadow-sm my-10">
+              <div className="h-14 w-14 bg-amber-100 rounded-full flex items-center justify-center mx-auto text-amber-600 text-2xl font-black">
+                🔒
+              </div>
+              <h4 className="text-base font-black text-slate-800">Bulletins Verrouillés</h4>
+              <p className="text-xs text-slate-600 leading-relaxed max-w-md mx-auto">
+                Le procès-verbal (PV) de conseil de classe pour la classe <strong>{classes.find(c => c.id === bulletinClassId)?.name || bulletinClassId}</strong> n'a pas encore été validé et signé électroniquement par la Direction Générale.
+              </p>
+              <p className="text-[11px] text-slate-450">
+                Les bulletins ne seront générés, consultables et imprimables qu'après la validation finale des moyennes de cette classe.
+              </p>
+              <button
+                onClick={() => setActiveSubTab('pv_validation')}
+                className="cursor-pointer inline-flex items-center gap-1 text-xs font-bold text-[#0b4998] hover:underline bg-transparent border-0"
+              >
+                Aller au module de validation des Procès-Verbaux &rarr;
+              </button>
+            </div>
+          ) : (
+            /* HTML formal printable bulletin sheet styled identically to school standards */
+            <div className="max-w-3xl mx-auto bg-white border border-slate-300 p-6 text-slate-900 shadow-xl font-sans min-h-[580px] space-y-5">
             
             {/* Header part */}
             <div className="grid grid-cols-2 pb-3 border-b-2 border-slate-900 text-xs items-center">
@@ -507,7 +834,7 @@ export default function EvaluationModule({
                 </thead>
                 <tbody>
                   {activeStudentReport.subjectsData.map(r => {
-                    const matchedCoef = 2; // default
+                    const matchedCoef = r.subject.coefficient || 1;
                     const scorePoints = r.average !== null ? (r.average * matchedCoef).toFixed(2) : '-';
                     
                     return (
@@ -541,8 +868,8 @@ export default function EvaluationModule({
             {/* Quick aggregate results rows summary */}
             <div className="grid grid-cols-2 border border-slate-200 rounded-xl p-3 text-xs gap-4 font-semibold text-slate-750">
               <div className="space-y-1">
-                <span>Total des Coefficients : **{activeStudentReport.subjectsData.length * 2}**</span> <br />
-                <span>Total des Points : **{(activeStudentReport.finalWeightedAverage * activeStudentReport.subjectsData.length * 2).toFixed(2)} / {(activeStudentReport.subjectsData.length * 2 * 20)}**</span>
+                <span>Total des Coefficients : **{activeStudentReport.subjectsData.reduce((acc, curr) => acc + (curr.average !== null ? (curr.subject.coefficient || 1) : 0), 0)}**</span> <br />
+                <span>Total des Points : **{activeStudentReport.subjectsData.reduce((acc, curr) => acc + (curr.average !== null ? curr.average * (curr.subject.coefficient || 1) : 0), 0).toFixed(2)} / {activeStudentReport.subjectsData.reduce((acc, curr) => acc + (curr.average !== null ? (curr.subject.coefficient || 1) : 0), 0) * 20}**</span>
               </div>
               <div className="text-right space-y-1">
                 <span className="text-sm font-black text-[#0b4998]">Moyenne du Premier Trimestre : {activeStudentReport.finalWeightedAverage.toFixed(2)} / 20</span> <br />
@@ -575,7 +902,7 @@ export default function EvaluationModule({
             </div>
 
           </div>
-
+          )}
         </div>
       )}
 

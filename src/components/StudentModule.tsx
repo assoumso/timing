@@ -37,6 +37,7 @@ interface StudentRecord {
   matriculeNat?: string;
   photo?: string;
   city: string;
+  lv2?: string; // Langue Vivante 2 (Espagnol, Allemand, etc.)
 }
 
 export default function StudentModule({
@@ -53,11 +54,11 @@ export default function StudentModule({
     if (saved) return JSON.parse(saved);
     // realistic default students (Côte d'Ivoire accents & names + mock photos and matricules nationales)
     return [
-      { id: 'std_1', firstName: 'Koffi', lastName: 'Yao Anderson', gender: 'M', birthDate: '2014-04-12', classId: '6A', tutorName: 'Koffi Blaise', tutorPhone: '+225 07 41 85 96 03', status: 'Inscrit', matricule: 'M-2026-4102', matriculeNat: 'CI-0125-9831K', photo: '', city: 'Cocody, Abidjan' },
-      { id: 'std_2', firstName: 'Diomandé', lastName: 'Aminata', gender: 'F', birthDate: '2013-08-19', classId: '6B', tutorName: 'Diomandé Lanciné', tutorPhone: '+225 05 52 41 12 74', status: 'Réinscrit', matricule: 'M-2024-1185', matriculeNat: 'CI-0124-7744D', photo: '', city: 'Marcory, Abidjan' },
-      { id: 'std_3', firstName: 'Kouassi', lastName: 'Koffi Charles', gender: 'M', birthDate: '2012-11-05', classId: '3A', tutorName: 'Mme Kouassi Hortense', tutorPhone: '+225 07 09 85 12 43', status: 'Inscrit', matricule: 'M-2026-9981', matriculeNat: 'CI-0125-1109C', photo: '', city: 'Bingerville' },
-      { id: 'std_4', firstName: 'Sylla', lastName: 'Ibrahim Karim', gender: 'M', birthDate: '2010-01-30', classId: '3B', tutorName: 'Sylla Fatoumata', tutorPhone: '+225 01 02 03 04 05', status: 'Réinscrit', matricule: 'M-2023-0056', matriculeNat: 'CI-0123-5591I', photo: '', city: 'Plateau' },
-      { id: 'std_5', firstName: 'Gomez', lastName: 'Marie-Chantal Enola', gender: 'F', birthDate: '2008-07-21', classId: '3A', tutorName: 'Gomez Robert (Ambass.)', tutorPhone: '+225 07 41 02 85 96', status: 'Inscrit', matricule: 'M-2026-0103', matriculeNat: 'CI-0125-0044E', photo: '', city: 'Cocody Riviera' }
+      { id: 'std_1', firstName: 'Koffi', lastName: 'Yao Anderson', gender: 'M', birthDate: '2014-04-12', classId: '6A', tutorName: 'Koffi Blaise', tutorPhone: '+225 07 41 85 96 03', status: 'Inscrit', matricule: 'M-2026-4102', matriculeNat: 'CI-0125-9831K', photo: '', city: 'Cocody, Abidjan', lv2: 'Espagnol' },
+      { id: 'std_2', firstName: 'Diomandé', lastName: 'Aminata', gender: 'F', birthDate: '2013-08-19', classId: '6B', tutorName: 'Diomandé Lanciné', tutorPhone: '+225 05 52 41 12 74', status: 'Réinscrit', matricule: 'M-2024-1185', matriculeNat: 'CI-0124-7744D', photo: '', city: 'Marcory, Abidjan', lv2: 'Allemand' },
+      { id: 'std_3', firstName: 'Kouassi', lastName: 'Koffi Charles', gender: 'M', birthDate: '2012-11-05', classId: '3A', tutorName: 'Mme Kouassi Hortense', tutorPhone: '+225 07 09 85 12 43', status: 'Inscrit', matricule: 'M-2026-9981', matriculeNat: 'CI-0125-1109C', photo: '', city: 'Bingerville', lv2: 'Espagnol' },
+      { id: 'std_4', firstName: 'Sylla', lastName: 'Ibrahim Karim', gender: 'M', birthDate: '2010-01-30', classId: '3B', tutorName: 'Sylla Fatoumata', tutorPhone: '+225 01 02 03 04 05', status: 'Réinscrit', matricule: 'M-2023-0056', matriculeNat: 'CI-0123-5591I', photo: '', city: 'Plateau', lv2: 'Allemand' },
+      { id: 'std_5', firstName: 'Gomez', lastName: 'Marie-Chantal Enola', gender: 'F', birthDate: '2008-07-21', classId: '3A', tutorName: 'Gomez Robert (Ambass.)', tutorPhone: '+225 07 41 02 85 96', status: 'Inscrit', matricule: 'M-2026-0103', matriculeNat: 'CI-0125-0044E', photo: '', city: 'Cocody Riviera', lv2: 'Espagnol' }
     ];
   });
 
@@ -81,7 +82,8 @@ export default function StudentModule({
     status: 'Inscrit' as 'Inscrit' | 'Réinscrit',
     city: 'Abidjan',
     matriculeNat: '',
-    photo: ''
+    photo: '',
+    lv2: 'Aucun'
   });
 
   // Autosave
@@ -114,7 +116,8 @@ export default function StudentModule({
       matricule: uniqueMatricule,
       matriculeNat: generatedMatriculeNat,
       photo: enrollForm.photo,
-      city: enrollForm.city.trim() || "Abidjan"
+      city: enrollForm.city.trim() || "Abidjan",
+      lv2: enrollForm.lv2 || 'Aucun'
     };
 
     setStudents(prev => [newStudent, ...prev]);
@@ -133,7 +136,8 @@ export default function StudentModule({
       status: 'Inscrit',
       city: 'Abidjan',
       matriculeNat: '',
-      photo: ''
+      photo: '',
+      lv2: 'Aucun'
     });
     
     // Redirect to list
@@ -300,7 +304,14 @@ export default function StudentModule({
                                 )}
                               </div>
                               <div>
-                                <span className="font-extrabold text-[#01142e] text-xs block">{std.firstName} {std.lastName}</span>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-extrabold text-[#01142e] text-xs block">{std.firstName} {std.lastName}</span>
+                                  {std.lv2 && std.lv2 !== 'Aucun' && (
+                                    <span className="inline-block px-1.5 py-0.2 bg-amber-50 border border-amber-200 text-amber-700 text-[8.5px] font-extrabold rounded-md uppercase">
+                                      LV2: {std.lv2}
+                                    </span>
+                                  )}
+                                </div>
                                 <span className="text-[10px] text-slate-400 font-semibold block">Né le {new Date(std.birthDate).toLocaleDateString('fr-FR', { dateStyle: 'medium' })}</span>
                               </div>
                             </div>
@@ -556,7 +567,7 @@ export default function StudentModule({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pb-3 border-b border-slate-100">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 pb-3 border-b border-slate-100">
               <div className="space-y-1">
                 <label className="text-xs font-bold text-slate-500">Affectation Classe</label>
                 <select 
@@ -579,6 +590,21 @@ export default function StudentModule({
                 >
                   <option value="Inscrit">Nouvelle Inscription (Inscrit)</option>
                   <option value="Réinscrit">Réinscription d'office (Réinscrit)</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-500">Langue Vivante 2 (LV2)</label>
+                <select 
+                  value={enrollForm.lv2}
+                  onChange={(e) => setEnrollForm(prev => ({ ...prev, lv2: e.target.value }))}
+                  className="w-full px-3 py-2 bg-slate-50 border border-[#dee2e6] rounded-xl text-xs font-bold focus:outline-none"
+                >
+                  <option value="Aucun">Aucune (N/A)</option>
+                  <option value="Espagnol">Espagnol</option>
+                  <option value="Allemand">Allemand</option>
+                  <option value="Italien">Italien</option>
+                  <option value="Arabe">Arabe</option>
                 </select>
               </div>
 

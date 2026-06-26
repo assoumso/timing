@@ -12,11 +12,12 @@ import {
   AlertCircle,
   User 
 } from 'lucide-react';
-import { SubjectItem, ClassItem, UserAccount } from '../types';
+import { SubjectItem, ClassItem, UserAccount, TeacherItem } from '../types';
 
 interface AdministrationModuleProps {
   subjects: SubjectItem[];
   classes: ClassItem[];
+  teachers?: TeacherItem[];
   schoolName: string;
   setSchoolName: (name: string) => void;
   schoolSubName: string;
@@ -40,6 +41,7 @@ interface AdministrationModuleProps {
 export default function AdministrationModule({
   subjects,
   classes,
+  teachers = [],
   schoolName,
   setSchoolName,
   schoolSubName,
@@ -111,7 +113,8 @@ export default function AdministrationModule({
   const [newCampus, setNewCampus] = useState({ name: '', location: '' });
   const [newFiliere, setNewFiliere] = useState({ name: '', code: '' });
   const [newNiveau, setNewNiveau] = useState('');
-  const [newUserAccount, setNewUserAccount] = useState({ name: '', email: '', password: '', role: 'student' as any });
+  const [newUserAccount, setNewUserAccount] = useState({ name: '', email: '', password: '', role: 'student' as any, teacherId: '' });
+  const [editingAccessAccountId, setEditingAccessAccountId] = useState<string | null>(null);
 
   const handleAddUserAccount = (e: React.FormEvent) => {
     e.preventDefault();
@@ -127,6 +130,11 @@ export default function AdministrationModule({
       return;
     }
 
+    if (newUserAccount.role === 'teacher' && !newUserAccount.teacherId) {
+      alert("Veuillez associer ce compte à un enseignant.");
+      return;
+    }
+
     if (setUserAccounts) {
       setUserAccounts(prev => [
         ...prev,
@@ -136,11 +144,12 @@ export default function AdministrationModule({
           email: newUserAccount.email.trim().toLowerCase(),
           password: newUserAccount.password.trim(),
           role: newUserAccount.role,
+          teacherId: newUserAccount.role === 'teacher' ? newUserAccount.teacherId : undefined,
           createdAt: new Date().toLocaleDateString('fr-FR')
         }
       ]);
     }
-    setNewUserAccount({ name: '', email: '', password: '', role: 'student' });
+    setNewUserAccount({ name: '', email: '', password: '', role: 'student', teacherId: '' });
   };
 
   const handleDeleteUserAccount = (userId: string) => {
@@ -694,7 +703,7 @@ export default function AdministrationModule({
                 <label className="text-[9.5px] font-bold text-[#0b4998] uppercase block">Rôle / Espace d'accès</label>
                 <select 
                   value={newUserAccount.role}
-                  onChange={(e) => setNewUserAccount(prev => ({ ...prev, role: e.target.value as any }))}
+                  onChange={(e) => setNewUserAccount(prev => ({ ...prev, role: e.target.value as any, teacherId: '' }))}
                   className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#ee7b11]"
                 >
                   <option value="super_admin">👑 Administrateur Global</option>
@@ -706,6 +715,31 @@ export default function AdministrationModule({
                   <option value="student">🎓 Portail Élève</option>
                 </select>
               </div>
+
+              {newUserAccount.role === 'teacher' && (
+                <div className="space-y-1">
+                  <label className="text-[9.5px] font-bold text-[#ee7b11] uppercase block">Associer Enseignant</label>
+                  <select
+                    required
+                    value={newUserAccount.teacherId}
+                    onChange={(e) => {
+                      const tId = e.target.value;
+                      const selectedTeacher = teachers.find(t => t.id === tId);
+                      setNewUserAccount(prev => ({
+                        ...prev,
+                        teacherId: tId,
+                        name: selectedTeacher ? selectedTeacher.name : prev.name
+                      }));
+                    }}
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#ee7b11]"
+                  >
+                    <option value="">-- Sélectionner l'Enseignant --</option>
+                    {teachers.map(t => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <button 
                 type="submit"
@@ -730,42 +764,140 @@ export default function AdministrationModule({
               </thead>
               <tbody>
                 {userAccounts.map(account => (
-                  <tr key={account.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition">
-                    <td className="p-3 text-xs">
-                      <div className="flex items-center gap-2">
-                        <div className="h-7 w-7 rounded-lg bg-[#0b4998]/10 text-[#0b4998] font-bold text-xs flex items-center justify-center uppercase">
-                          {account.role.substring(0, 2)}
+                  <React.Fragment key={account.id}>
+                    <tr className="border-b border-slate-100 hover:bg-slate-50/50 transition">
+                      <td className="p-3 text-xs">
+                        <div className="flex items-center gap-2">
+                          <div className="h-7 w-7 rounded-lg bg-[#0b4998]/10 text-[#0b4998] font-bold text-xs flex items-center justify-center uppercase">
+                            {account.role.substring(0, 2)}
+                          </div>
+                          <div>
+                            <span className="font-extrabold text-slate-800 block text-xs">{account.name}</span>
+                            <span className="text-[10px] font-semibold text-slate-550 uppercase flex items-center gap-1">
+                              <span>
+                                {account.role === 'super_admin' ? '👑 Admin' : 
+                                 account.role === 'director' ? '⚖️ Directeur' :
+                                 account.role === 'accountant' ? '💼 Comptable' : 
+                                 account.role === 'supervisor' ? '🛡️ Surveillant' : 
+                                 account.role === 'teacher' ? '👨‍🏫 Enseignant' : 
+                                 account.role === 'parent' ? '👨‍👩‍👦 Parent' : '🎓 Élève'}
+                              </span>
+                              {account.teacherId && (
+                                <span className="text-[9px] bg-rose-50 text-rose-600 px-1 rounded font-bold">
+                                  Lié: {account.teacherId}
+                                </span>
+                              )}
+                            </span>
+                          </div>
                         </div>
-                        <div>
-                          <span className="font-extrabold text-slate-800 block text-xs">{account.name}</span>
-                          <span className="text-[10px] font-semibold text-slate-550 uppercase">
-                            {account.role === 'super_admin' ? '👑 Admin' : 
-                             account.role === 'director' ? '⚖️ Directeur' :
-                             account.role === 'accountant' ? '💼 Comptable' : 
-                             account.role === 'supervisor' ? '🛡️ Surveillant' : 
-                             account.role === 'teacher' ? '👨‍🏫 Enseignant' : 
-                             account.role === 'parent' ? '👨‍👩‍👦 Parent' : '🎓 Élève'}
-                          </span>
+                      </td>
+                      <td className="p-3 text-xs font-semibold text-slate-600 font-mono">
+                        {account.email}
+                      </td>
+                      <td className="p-3 text-xs font-bold text-[#ee7b11] font-mono">
+                        {account.password || "••••••••"}
+                      </td>
+                      <td className="p-3 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={() => setEditingAccessAccountId(prev => prev === account.id ? null : account.id)}
+                            className={`cursor-pointer p-1.5 rounded-lg border transition ${
+                              editingAccessAccountId === account.id 
+                                ? 'bg-[#ee7b11] text-white border-[#ee7b11]' 
+                                : 'bg-white text-slate-400 border-slate-200 hover:text-slate-700 hover:border-slate-300'
+                            }`}
+                            title="Configurer les Pages d'Accès (RBAC)"
+                          >
+                            <ShieldCheck className="h-3.5 w-3.5" />
+                          </button>
+                          <button 
+                            onClick={() => handleDeleteUserAccount(account.id)}
+                            disabled={account.email === "admin@school.com"}
+                            className="cursor-pointer p-1.5 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 disabled:opacity-30 disabled:hover:bg-transparent transition"
+                            title="Désactiver / Supprimer le compte"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
                         </div>
-                      </div>
-                    </td>
-                    <td className="p-3 text-xs font-semibold text-slate-600 font-mono">
-                      {account.email}
-                    </td>
-                    <td className="p-3 text-xs font-bold text-[#ee7b11] font-mono">
-                      {account.password || "••••••••"}
-                    </td>
-                    <td className="p-3 text-center">
-                      <button 
-                        onClick={() => handleDeleteUserAccount(account.id)}
-                        disabled={account.email === "admin@school.com"}
-                        className="cursor-pointer p-1.5 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 disabled:opacity-30 disabled:hover:bg-transparent transition"
-                        title="Désactiver / Supprimer le compte"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </td>
-                  </tr>
+                      </td>
+                    </tr>
+                    {editingAccessAccountId === account.id && (
+                      <tr className="bg-slate-50/50">
+                        <td colSpan={4} className="p-4">
+                          <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-3 shadow-inner">
+                            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                              <span className="text-[11px] font-black text-slate-800 uppercase tracking-wider">
+                                🔑 Autorisations d'Accès pour {account.name}
+                              </span>
+                              <button
+                                onClick={() => setEditingAccessAccountId(null)}
+                                className="text-[10px] font-bold text-slate-450 hover:text-slate-700 uppercase"
+                              >
+                                Fermer ×
+                              </button>
+                            </div>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                              {[
+                                { id: 'school_erp_dashboard', name: '📊 Tableau de Bord' },
+                                { id: 'erp_students', name: '🎓 Élèves' },
+                                { id: 'erp_teachers', name: '👨‍🏫 Enseignants' },
+                                { id: 'erp_attendance', name: '🛡️ Présences' },
+                                { id: 'erp_financial', name: '💼 Comptabilité' },
+                                { id: 'erp_evaluations', name: '🏆 Notes & Bulletins' },
+                                { id: 'erp_exams', name: '📝 Examens Scolaires' },
+                                { id: 'dashboard', name: '📅 Emplois du temps' },
+                                { id: 'portal_accountant', name: '🏦 Portail Comptable' },
+                                { id: 'portal_supervisor', name: '👮 Portail Surveillant' },
+                                { id: 'portal_teacher', name: '👨‍🏫 Portail Enseignant' },
+                                { id: 'portal_parent', name: '👨‍👩‍👦 Portail Parent' },
+                                { id: 'portal_student', name: '🎓 Portail Élève' },
+                                { id: 'erp_admin', name: '⚙️ Config & Comptes' },
+                              ].map(tab => {
+                                const isExplicit = account.allowedTabs !== undefined;
+                                const isChecked = isExplicit 
+                                  ? account.allowedTabs!.includes(tab.id)
+                                  : true;
+                                
+                                return (
+                                  <label key={tab.id} className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-650 hover:text-slate-900 select-none">
+                                    <input
+                                      type="checkbox"
+                                      checked={isChecked}
+                                      onChange={() => {
+                                        if (setUserAccounts) {
+                                          setUserAccounts(prev => prev.map(acc => {
+                                            if (acc.id === account.id) {
+                                              const currentTabs = acc.allowedTabs || [
+                                                'school_erp_dashboard', 'erp_students', 'erp_teachers', 'erp_attendance', 
+                                                'erp_financial', 'erp_evaluations', 'erp_exams', 'dashboard',
+                                                'portal_accountant', 'portal_supervisor', 'portal_teacher', 'portal_parent', 
+                                                'portal_student', 'erp_admin'
+                                              ];
+                                              const nextTabs = currentTabs.includes(tab.id)
+                                                ? currentTabs.filter(id => id !== tab.id)
+                                                : [...currentTabs, tab.id];
+                                              return { ...acc, allowedTabs: nextTabs };
+                                            }
+                                            return acc;
+                                          }));
+                                        }
+                                      }}
+                                      className="rounded border-slate-300 text-[#ee7b11] focus:ring-[#ee7b11] h-3.5 w-3.5"
+                                    />
+                                    <span>{tab.name}</span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                            <div className="text-[10px] text-slate-400 font-medium leading-relaxed border-t border-slate-100 pt-2 flex items-center gap-1">
+                              <AlertCircle className="h-3 w-3 text-slate-350 shrink-0" />
+                              <span>Par défaut, l'utilisateur a accès à toutes les pages de son profil. Cochez/décochez les cases ci-dessus pour restreindre ou étendre ses accès.</span>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
                 ))}
               </tbody>
             </table>

@@ -45,6 +45,7 @@ import PeripheralErpModules from './components/PeripheralErpModules';
 import ReportsCenter from './components/ReportsCenter';
 import { ToolsTab } from './components/ToolsTab';
 import { ExamsModule } from './components/ExamsModule';
+import TeacherEvaluationSaisie from './components/TeacherEvaluationSaisie';
 import { 
   Calendar, 
   Wrench,
@@ -222,7 +223,84 @@ export default function App() {
   const [printClassId, setPrintClassId] = useState<string | null>(null);
 
   // Teacher portal state variables
-  const [selectedProfPortalId, setSelectedProfPortalId] = useState<string>('prof_martin');
+  const [selectedProfPortalId, setSelectedProfPortalId] = useState<string>(() => {
+    const savedUser = localStorage.getItem('barakat_current_user');
+    if (savedUser) {
+      const parsed = JSON.parse(savedUser) as UserAccount;
+      if (parsed.role === 'teacher' && parsed.teacherId) {
+        return parsed.teacherId;
+      }
+    }
+    return 'prof_martin';
+  });
+
+  const [marks, setMarks] = useState<any[]>(() => {
+    const saved = localStorage.getItem('erp_student_marks');
+    if (saved) return JSON.parse(saved);
+    return [
+      { id: 'mk_1', studentId: 'std_1', classId: '6A', subjectId: 'math', examName: 'Devoir Surveillé 1', weight: 1, score: 14.5, recordedAt: '2026-06-01' },
+      { id: 'mk_2', studentId: 'std_1', classId: '6A', subjectId: 'math', examName: 'Examen Trimestre', weight: 2, score: 16.0, recordedAt: '2026-06-15' },
+      { id: 'mk_3', studentId: 'std_1', classId: '6A', subjectId: 'fr', examName: 'Composition Française', weight: 2, score: 13.5, recordedAt: '2026-06-12' },
+      { id: 'mk_4', studentId: 'std_1', classId: '6A', subjectId: 'pc', examName: 'Devoir Labo 1', weight: 1, score: 17.0, recordedAt: '2026-06-08' },
+      { id: 'mk_5', studentId: 'std_2', classId: '6B', subjectId: 'math', examName: 'Examen Trimestre', weight: 2, score: 11.0, recordedAt: '2026-06-15' },
+      { id: 'mk_6', studentId: 'std_2', classId: '6B', subjectId: 'fr', examName: 'Composition Française', weight: 2, score: 16.5, recordedAt: '2026-06-12' },
+      { id: 'mk_7', studentId: 'std_3', classId: '3A', subjectId: 'math', examName: 'Examen National blanc', weight: 3, score: 18.5, recordedAt: '2026-06-14' },
+      { id: 'mk_8', studentId: 'std_3', classId: '3A', subjectId: 'fr', examName: 'Devoir Surveillé', weight: 1, score: 11.0, recordedAt: '2026-06-12' },
+      { id: 'mk_9', studentId: 'std_3', classId: '3A', subjectId: 'pc', examName: 'Devoir Labo 1', weight: 1, score: 15.5, recordedAt: '2026-06-05' },
+      { id: 'mk_10', studentId: 'std_5', classId: '3A', subjectId: 'math', examName: 'Examen National blanc', weight: 3, score: 13.0, recordedAt: '2026-06-14' },
+      { id: 'mk_11', studentId: 'std_5', classId: '3A', subjectId: 'fr', examName: 'Devoir Surveillé', weight: 1, score: 17.5, recordedAt: '2026-06-12' },
+      { id: 'mk_12', studentId: 'std_5', classId: '3A', subjectId: 'pc', examName: 'Devoir Labo 1', weight: 1, score: 14.0, recordedAt: '2026-06-05' }
+    ];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('erp_student_marks', JSON.stringify(marks));
+  }, [marks]);
+
+  useEffect(() => {
+    if (currentUser?.role === 'teacher' && currentUser.teacherId) {
+      setSelectedProfPortalId(currentUser.teacherId);
+    }
+  }, [currentUser]);
+
+  // Route Guard redirect based on RBAC permissions
+  useEffect(() => {
+    if (!currentUser) return;
+    
+    const isTabAllowed = (tabId: string) => {
+      if (currentUser.role === 'super_admin' || currentUser.role === 'director') return true;
+      if (currentUser.allowedTabs !== undefined) {
+        return currentUser.allowedTabs.includes(tabId);
+      }
+      switch (currentUser.role) {
+        case 'accountant':
+          return ['portal_accountant', 'erp_financial', 'school_erp_dashboard'].includes(tabId);
+        case 'supervisor':
+          return ['portal_supervisor', 'erp_attendance', 'erp_students'].includes(tabId);
+        case 'teacher':
+          return ['portal_teacher'].includes(tabId);
+        case 'parent':
+          return ['portal_parent'].includes(tabId);
+        case 'student':
+          return ['portal_student'].includes(tabId);
+        default:
+          return false;
+      }
+    };
+
+    if (!isTabAllowed(activeTab)) {
+      const possibleTabs = [
+        'portal_student',
+        'portal_parent',
+        'portal_teacher',
+        'portal_supervisor',
+        'portal_accountant',
+        'school_erp_dashboard'
+      ];
+      const fallbackTab = possibleTabs.find(t => isTabAllowed(t)) || 'settings';
+      setActiveTab(fallbackTab);
+    }
+  }, [activeTab, currentUser]);
 
   // Shared state for reported absences
   const [reportedAbsences, setReportedAbsences] = useState<Array<{ teacherId: string, dayId: string, slotId: string }>>(() => {
@@ -281,10 +359,10 @@ export default function App() {
   const [modalRoomId, setModalRoomId] = useState('');
 
   // Form fields adding new elements
-  const [newClass, setNewClass] = useState({ id: '', name: '', capacity: 25, color: 'blue' });
+  const [newClass, setNewClass] = useState({ id: '', name: '', capacity: 25, color: 'blue', mainTeacherId: '' });
   const [newTeacher, setNewTeacher] = useState({ id: '', name: '', subjects: [] as string[], maxHours: 18, color: 'indigo', email: '' });
   const [newRoom, setNewRoom] = useState({ id: '', name: '', type: 'Standard' as any, capacity: 30, color: 'slate' });
-  const [newSubject, setNewSubject] = useState({ id: '', name: '', color: 'rose' });
+  const [newSubject, setNewSubject] = useState({ id: '', name: '', color: 'rose', coefficient: 2, isLV2: false });
 
   // DB record editing states
   const [editingTeacherId, setEditingTeacherId] = useState<string | null>(null);
@@ -1032,7 +1110,13 @@ export default function App() {
     
     if (editingClassId) {
       // Edit mode
-      setClasses(prev => prev.map(c => c.id === editingClassId ? { ...c, name: newClass.name, capacity: newClass.capacity, color: newClass.color } : c));
+      setClasses(prev => prev.map(c => c.id === editingClassId ? { 
+        ...c, 
+        name: newClass.name, 
+        capacity: newClass.capacity, 
+        color: newClass.color,
+        mainTeacherId: newClass.mainTeacherId || undefined
+      } : c));
       setEditingClassId(null);
     } else {
       // Create mode
@@ -1040,9 +1124,15 @@ export default function App() {
         alert("Une classe avec cet identifiant existe déjà !");
         return;
       }
-      setClasses(prev => [...prev, newClass]);
+      setClasses(prev => [...prev, {
+        id: newClass.id,
+        name: newClass.name,
+        capacity: newClass.capacity,
+        color: newClass.color,
+        mainTeacherId: newClass.mainTeacherId || undefined
+      }]);
     }
-    setNewClass({ id: '', name: '', capacity: 25, color: 'blue' });
+    setNewClass({ id: '', name: '', capacity: 25, color: 'blue', mainTeacherId: '' });
   };
 
   const handleAddTeacher = (e: React.FormEvent) => {
@@ -1112,7 +1202,9 @@ export default function App() {
       setSubjects(prev => prev.map(s => s.id === editingSubjectId ? {
         ...s,
         name: newSubject.name,
-        color: newSubject.color
+        color: newSubject.color,
+        coefficient: parseInt(String(newSubject.coefficient)) || 2,
+        isLV2: !!newSubject.isLV2
       } : s));
       setEditingSubjectId(null);
     } else {
@@ -1121,9 +1213,15 @@ export default function App() {
         alert("Une matière avec cet identifiant existe déjà !");
         return;
       }
-      setSubjects(prev => [...prev, newSubject]);
+      setSubjects(prev => [...prev, {
+        id: newSubject.id,
+        name: newSubject.name,
+        color: newSubject.color,
+        coefficient: parseInt(String(newSubject.coefficient)) || 2,
+        isLV2: !!newSubject.isLV2
+      }]);
     }
-    setNewSubject({ id: '', name: '', color: 'rose' });
+    setNewSubject({ id: '', name: '', color: 'rose', coefficient: 2, isLV2: false });
   };
 
   // Start Editing Triggers
@@ -1156,7 +1254,8 @@ export default function App() {
       id: cls.id,
       name: cls.name,
       capacity: cls.capacity,
-      color: cls.color || 'blue'
+      color: cls.color || 'blue',
+      mainTeacherId: cls.mainTeacherId || ''
     });
   };
 
@@ -1165,7 +1264,9 @@ export default function App() {
     setNewSubject({
       id: sub.id,
       name: sub.name,
-      color: sub.color || 'rose'
+      color: sub.color || 'rose',
+      coefficient: sub.coefficient || 2,
+      isLV2: !!sub.isLV2
     });
   };
 
@@ -1629,7 +1730,29 @@ export default function App() {
 
         {/* Modern Unified Category-based Dropdown Navigation System */}
         {(() => {
-          const menuCategories = [
+          const isTabAllowed = (tabId: string) => {
+            if (!currentUser) return true;
+            if (currentUser.role === 'super_admin' || currentUser.role === 'director') return true;
+            if (currentUser.allowedTabs !== undefined) {
+              return currentUser.allowedTabs.includes(tabId);
+            }
+            switch (currentUser.role) {
+              case 'accountant':
+                return ['portal_accountant', 'erp_financial', 'school_erp_dashboard'].includes(tabId);
+              case 'supervisor':
+                return ['portal_supervisor', 'erp_attendance', 'erp_students'].includes(tabId);
+              case 'teacher':
+                return ['portal_teacher'].includes(tabId);
+              case 'parent':
+                return ['portal_parent'].includes(tabId);
+              case 'student':
+                return ['portal_student'].includes(tabId);
+              default:
+                return false;
+            }
+          };
+
+          const rawCategories = [
             {
               id: "erp",
               label: "📊 Gestion & Scolarité (ERP)",
@@ -1686,11 +1809,18 @@ export default function App() {
                 { id: "portal_teacher", name: "Espace Enseignant Individuel", icon: <Users className="h-4 w-4 text-[#ee7b11]" />, desc: "Consulter planning et indisponibilités" },
                 { id: "portal_parent", name: "Espace Parent d'Élève", icon: <Users className="h-4 w-4 text-teal-500" />, desc: "Paiements, bulletins & retards" },
                 { id: "portal_student", name: "Portail Élève Personnel", icon: <GraduationCap className="h-4 w-4 text-[#0b4998]" />, desc: "Mon emploi du temps" },
-                { id: "erp_admin", name: "comptes & Structure Administrative", icon: <Settings className="h-4 w-4 text-rose-500" />, desc: "Gestion des utilisateurs & configuration" },
+                { id: "erp_admin", name: "Comptes & Structure Administrative", icon: <Settings className="h-4 w-4 text-rose-500" />, desc: "Gestion des utilisateurs & configuration" },
                 { id: "settings", name: "Paramètres Techniques & Démo", icon: <Settings className="h-4 w-4 text-slate-500" />, desc: "Rétablir données ou se connecter" },
               ]
             }
           ];
+
+          const menuCategories = rawCategories
+            .map(cat => ({
+              ...cat,
+              items: cat.items.filter(item => isTabAllowed(item.id))
+            }))
+            .filter(cat => cat.items.length > 0);
 
           return (
             <div className="bg-[#093d80] border-t border-[#f3aa1c]/25 relative z-40">
@@ -1838,6 +1968,7 @@ export default function App() {
                 <AdministrationModule 
                   subjects={subjects}
                   classes={classes}
+                  teachers={teachers}
                   schoolName={schoolName}
                   setSchoolName={setSchoolName}
                   schoolSubName={schoolSubName}
@@ -1890,11 +2021,14 @@ export default function App() {
                 <EvaluationModule 
                   classes={classes}
                   subjects={subjects}
+                  teachers={teachers}
                   schoolName={schoolName}
                   schoolSubName={schoolSubName}
                   schoolMotto={schoolMotto}
                   academicYear={academicYear}
                   schoolDirector={schoolDirector}
+                  marks={marks}
+                  setMarks={setMarks}
                 />
               )}
 
@@ -2697,7 +2831,7 @@ export default function App() {
                         </button>
                       )}
                     </div>
-                    <form onSubmit={handleAddClass} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 items-end">
+                    <form onSubmit={handleAddClass} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 items-end">
                       <div className="space-y-1">
                         <label className="text-xs font-semibold text-slate-500">Identifiant Unique</label>
                         <input
@@ -2733,6 +2867,19 @@ export default function App() {
                         />
                       </div>
                       <div className="space-y-1">
+                        <label className="text-xs font-semibold text-slate-500">Professeur Principal</label>
+                        <select
+                          value={newClass.mainTeacherId || ''}
+                          onChange={(e) => setNewClass(prev => ({ ...prev, mainTeacherId: e.target.value }))}
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-250 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:ring-1 focus:ring-indigo-550"
+                        >
+                          <option value="">Aucun</option>
+                          {teachers.map(t => (
+                            <option key={t.id} value={t.id}>{t.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-1">
                         <label className="text-xs font-semibold text-slate-500">Code de thématique couleur</label>
                         <select
                           value={newClass.color}
@@ -2751,7 +2898,7 @@ export default function App() {
 
                       <button
                         type="submit"
-                        className="cursor-pointer h-10 w-full md:col-span-4 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center justify-center gap-1"
+                        className="cursor-pointer h-10 w-full md:col-span-5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center justify-center gap-1"
                       >
                         {editingClassId ? <Check className="h-4 w-4 text-emerald-400" /> : <Plus className="h-4 w-4" />}
                         <span>{editingClassId ? "Enregistrer les modifications" : "Créer la classe"}</span>
@@ -2814,6 +2961,11 @@ export default function App() {
                                 <div>
                                   <span className="font-extrabold text-indigo-800 tracking-tight text-sm block">{cls.name}</span>
                                   <span className="text-[10px] text-slate-400 block uppercase">Code ID : {cls.id}</span>
+                                  {cls.mainTeacherId && (
+                                    <span className="text-[9.5px] font-black text-rose-700 bg-rose-50 border border-rose-150 px-2 py-0.5 rounded-lg inline-block mt-1">
+                                      👑 PP : {teachers.find(t => t.id === cls.mainTeacherId)?.name || cls.mainTeacherId}
+                                    </span>
+                                  )}
                                 </div>
                                 
                                 {/* Details Accordion toggler */}
@@ -2939,7 +3091,7 @@ export default function App() {
                           type="button"
                           onClick={() => {
                             setEditingSubjectId(null);
-                            setNewSubject({ id: '', name: '', color: 'rose' });
+                            setNewSubject({ id: '', name: '', color: 'rose', coefficient: 2, isLV2: false });
                           }}
                           className="cursor-pointer text-xs font-bold text-slate-500 hover:text-red-500 bg-slate-100 hover:bg-red-50 border border-slate-200 px-3 py-1 rounded-xl transition"
                         >
@@ -2947,7 +3099,7 @@ export default function App() {
                         </button>
                       )}
                     </div>
-                    <form onSubmit={handleAddSubject} className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+                    <form onSubmit={handleAddSubject} className="grid grid-cols-1 sm:grid-cols-5 gap-4 items-end">
                       <div className="space-y-1">
                         <label className="text-xs font-semibold text-slate-500">Identifiant Unique</label>
                         <input
@@ -2988,10 +3140,31 @@ export default function App() {
                           <option value="sky">bleu ciel</option>
                         </select>
                       </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-semibold text-slate-500">Coefficient</label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="10"
+                          value={newSubject.coefficient || 2}
+                          onChange={(e) => setNewSubject(prev => ({ ...prev, coefficient: parseInt(e.target.value) || 2 }))}
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-250 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:ring-1 focus:ring-indigo-550"
+                        />
+                      </div>
+                      <div className="space-y-1 flex items-center gap-2 pb-2">
+                        <input
+                          type="checkbox"
+                          id="isLV2-checkbox"
+                          checked={!!newSubject.isLV2}
+                          onChange={(e) => setNewSubject(prev => ({ ...prev, isLV2: e.target.checked }))}
+                          className="w-4 h-4 rounded text-indigo-650 focus:ring-indigo-550 border-slate-300"
+                        />
+                        <label htmlFor="isLV2-checkbox" className="text-xs font-semibold text-slate-700 cursor-pointer select-none">Option LV2</label>
+                      </div>
 
                       <button
                         type="submit"
-                        className="cursor-pointer h-10 w-full sm:col-span-3 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center justify-center gap-1"
+                        className="cursor-pointer h-10 w-full sm:col-span-5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center justify-center gap-1"
                       >
                         {editingSubjectId ? <Check className="h-4 w-4 text-emerald-400" /> : <Plus className="h-4 w-4" />}
                         <span>{editingSubjectId ? "Enregistrer les modifications" : "Créer la matière"}</span>
@@ -3010,6 +3183,16 @@ export default function App() {
                             <div>
                               <span className={`text-sm font-bold block ${styleColor.font}`}>{sub.name}</span>
                               <span className="text-[10px] text-slate-400 font-mono">ID: {sub.id}</span>
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                <span className="text-[9.5px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">
+                                  Coef: {sub.coefficient || 1}
+                                </span>
+                                {sub.isLV2 && (
+                                  <span className="text-[9.5px] font-bold text-amber-700 bg-amber-55/70 border border-amber-200 px-1.5 py-0.5 rounded">
+                                    Option LV2
+                                  </span>
+                                )}
+                              </div>
                             </div>
                             
                             <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
@@ -3346,6 +3529,16 @@ export default function App() {
                   </tbody>
                 </table>
               </div>
+
+              {/* SECTION: Saisie des Moyennes par Classe */}
+              <TeacherEvaluationSaisie
+                teacherId={selectedProfPortalId}
+                classes={classes}
+                subjects={subjects}
+                courses={courses}
+                marks={marks}
+                setMarks={setMarks}
+              />
             </div>
           )}
 

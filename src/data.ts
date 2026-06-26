@@ -1,20 +1,20 @@
-import { ClassItem, TeacherItem, SubjectItem, RoomItem, ScheduleCourse, UserAccount } from './types';
-
 export const INITIAL_SUBJECTS: SubjectItem[] = [
-  { id: 'math', name: 'Mathématiques', color: 'blue' },
-  { id: 'fra', name: 'Français', color: 'rose' },
-  { id: 'hg', name: 'Histoire-Géographie', color: 'amber' },
-  { id: 'sci', name: 'Physique-Chimie / SVT', color: 'emerald' },
-  { id: 'ang', name: 'Anglais', color: 'purple' },
-  { id: 'eps', name: 'Éducation Physique', color: 'cyan' },
-  { id: 'art', name: 'Arts Plastiques', color: 'indigo' }
+  { id: 'math', name: 'Mathématiques', color: 'blue', coefficient: 4 },
+  { id: 'fra', name: 'Français', color: 'rose', coefficient: 4 },
+  { id: 'hg', name: 'Histoire-Géographie', color: 'amber', coefficient: 2 },
+  { id: 'sci', name: 'Physique-Chimie / SVT', color: 'emerald', coefficient: 3 },
+  { id: 'ang', name: 'Anglais', color: 'purple', coefficient: 3 },
+  { id: 'eps', name: 'Éducation Physique', color: 'cyan', coefficient: 1 },
+  { id: 'art', name: 'Arts Plastiques', color: 'indigo', coefficient: 1 },
+  { id: 'esp_lv2', name: 'Espagnol LV2', color: 'rose', coefficient: 2, isLV2: true },
+  { id: 'all_lv2', name: 'Allemand LV2', color: 'blue', coefficient: 2, isLV2: true }
 ];
 
 export const INITIAL_CLASSES: ClassItem[] = [
-  { id: '6A', name: 'Classe de 6ème A', capacity: 25, color: 'emerald' },
-  { id: '5B', name: 'Classe de 5ème B', capacity: 32, color: 'sky' },
-  { id: '4C', name: 'Classe de 4ème C', capacity: 28, color: 'violet' },
-  { id: '3D', name: 'Classe de 3ème D', capacity: 22, color: 'amber' }
+  { id: '6A', name: 'Classe de 6ème A', capacity: 25, color: 'emerald', mainTeacherId: 'prof_martin' },
+  { id: '5B', name: 'Classe de 5ème B', capacity: 32, color: 'sky', mainTeacherId: 'prof_dubois' },
+  { id: '4C', name: 'Classe de 4ème C', capacity: 28, color: 'violet', mainTeacherId: 'prof_lopez' },
+  { id: '3D', name: 'Classe de 3ème D', capacity: 22, color: 'amber', mainTeacherId: 'prof_bernard' }
 ];
 
 export const INITIAL_ROOMS: RoomItem[] = [
