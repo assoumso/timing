@@ -18,7 +18,9 @@ import {
   Copy,
   Mail,
   ExternalLink,
-  MessageSquare
+  MessageSquare,
+  TrendingUp,
+  ShieldCheck
 } from 'lucide-react';
 import { ClassItem } from '../types';
 
@@ -442,11 +444,10 @@ export default function FinancialModule({
   // ----------------------------------------------------
   const [selectedReminderStudentId, setSelectedReminderStudentId] = useState<string>('');
   
-  // Scans all students and extracts those who are late or due in less than 7 days
   const getRemindersScannerList = () => {
     const list: any[] = [];
     studentList.forEach(std => {
-      if (std.assignmentStatus === 'Affecté') return; // State-sponsored are not subject to standard installments
+      if (std.assignmentStatus === 'Affecté') return;
       
       const bill = getStudentBillingSheet(std.id, std.classId);
       
@@ -457,7 +458,6 @@ export default function FinancialModule({
         const nowTime = new Date().getTime();
         const daysRemaining = Math.ceil((limitTime - nowTime) / (1000 * 60 * 60 * 24));
         
-        // Late or due within 7 days
         if (daysRemaining <= 7) {
           list.push({
             studentId: std.id,
@@ -502,8 +502,69 @@ export default function FinancialModule({
     return `Cher parent ${item.tutorName}, nous vous informons que la scolarité de votre enfant ${item.studentName} (${item.classId}), matricule ${item.matricule}, présente un solde restant de ${item.remainingAmount.toLocaleString()} FCFA pour la tranche "${item.installmentLabel}" qui était attendue le ${new Date(item.dueDate).toLocaleDateString('fr-FR')}. Merci de régulariser ce paiement dans les plus brefs délais à la caisse de l'école. Cordialement, la direction de ${schoolName}.`;
   };
 
-  // Selected reminder student detail
   const activeReminderItem = scannerList.find(x => x.studentId === selectedReminderStudentId);
+
+  // ----------------------------------------------------
+  // Global Summary Ledger (expected, paid, remaining, execution rates)
+  // ----------------------------------------------------
+  const calculateGlobalSummaryLedger = () => {
+    let expectedEnrollment = 0;
+    let expectedTuition = 0;
+    
+    let paidEnrollment = 0;
+    let paidTuition = 0;
+
+    studentList.forEach(std => {
+      const bill = getStudentBillingSheet(std.id, std.classId);
+      
+      if (std.assignmentStatus === 'Affecté') {
+        // State affectés pay single flat parental fee (considered Enrollment / Inscription)
+        expectedEnrollment += bill.finalInvoiceDue;
+        paidEnrollment += Math.min(bill.totalPaid, bill.finalInvoiceDue);
+      } else {
+        // Private students
+        // 1st installment is Enrollment ("Inscription")
+        // Other installments are Tuition ("Scolarité")
+        const firstInst = bill.installments[0];
+        const firstInstExpected = firstInst ? firstInst.discountedAmount : 0;
+        
+        expectedEnrollment += firstInstExpected;
+        expectedTuition += Math.max(0, bill.finalInvoiceDue - firstInstExpected);
+
+        // Calculate paid distribution
+        paidEnrollment += Math.min(bill.totalPaid, firstInstExpected);
+        paidTuition += Math.max(0, bill.totalPaid - firstInstExpected);
+      }
+    });
+
+    const totalExpected = expectedEnrollment + expectedTuition;
+    const totalPaid = paidEnrollment + paidTuition;
+
+    const remainingEnrollment = Math.max(0, expectedEnrollment - paidEnrollment);
+    const remainingTuition = Math.max(0, expectedTuition - paidTuition);
+    const totalRemaining = Math.max(0, totalExpected - totalPaid);
+
+    const rateEnrollment = expectedEnrollment > 0 ? Math.round((paidEnrollment / expectedEnrollment) * 100) : 100;
+    const rateTuition = expectedTuition > 0 ? Math.round((paidTuition / expectedTuition) * 100) : 100;
+    const rateTotal = totalExpected > 0 ? Math.round((totalPaid / totalExpected) * 100) : 100;
+
+    return {
+      expectedEnrollment,
+      expectedTuition,
+      totalExpected,
+      paidEnrollment,
+      paidTuition,
+      totalPaid,
+      remainingEnrollment,
+      remainingTuition,
+      totalRemaining,
+      rateEnrollment,
+      rateTuition,
+      rateTotal
+    };
+  };
+
+  const ledgerSummary = calculateGlobalSummaryLedger();
 
   return (
     <div className="space-y-6">
@@ -511,7 +572,7 @@ export default function FinancialModule({
       {/* Header panel */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-light">
         <div>
-          <h2 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+          <h2 className="text-xl font-black text-slate-905 tracking-tight flex items-center gap-2">
             <Banknote className="h-5.5 w-5.5 text-indigo-650" />
             <span>Gestion Financière & Recouvrement Scolarités</span>
           </h2>
@@ -563,229 +624,329 @@ export default function FinancialModule({
 
       {/* RENDER VIEW: CENTRAL BILLING DIRECTORY & DISMISSION */}
       {activeSubTab === 'billing' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        <div className="space-y-6">
           
-          {/* Cashier Payment Form & Installment Status Detail (5 cols) */}
-          <div className="lg:col-span-5 space-y-6">
-            
-            {/* Cashier entry */}
-            <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs space-y-4">
-              <h3 className="text-xs font-black uppercase text-[#0b4998] tracking-widest flex items-center gap-1.5">
-                <span>Encaissement Versement</span>
+          {/* Global Summary Table / Ledger Dashboard */}
+          <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+              <h3 className="text-xs font-black uppercase text-[#0b4998] tracking-widest flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 text-[#ee7b11]" />
+                <span>Tableau Synthétique Global du Recouvrement</span>
               </h3>
-
-              <form onSubmit={handleRegisterPayment} className="space-y-3.5">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase">Élève Payeur</label>
-                  <select
-                    value={payForm.studentId}
-                    onChange={(e) => setPayForm(prev => ({ ...prev, studentId: e.target.value }))}
-                    className="w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none"
-                  >
-                    {studentList.map(s => {
-                      const matchedClass = classes.find(c => c.id === s.classId)?.name || s.classId;
-                      const statusText = s.assignmentStatus === 'Affecté' ? 'Affecté État' : 'Privé';
-                      return (
-                        <option key={s.id} value={s.id}>{s.lastName} {s.firstName} ({matchedClass} - {statusText})</option>
-                      );
-                    })}
-                  </select>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase">Montant Versé (FCFA)</label>
-                  <input 
-                    type="number" 
-                    step="5000"
-                    required
-                    placeholder="ex: 15000"
-                    value={payForm.amount}
-                    onChange={(e) => setPayForm(prev => ({ ...prev, amount: parseInt(e.target.value) || 0 }))}
-                    className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black text-slate-800 focus:outline-none"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase">Mode paiement</label>
-                    <select
-                      value={payForm.paymentMethod}
-                      onChange={(e) => setPayForm(prev => ({ ...prev, paymentMethod: e.target.value as any }))}
-                      className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none"
-                    >
-                      <option value="Cash (Caisse)">Cash (Caisse)</option>
-                      <option value="Wave Mobile">Wave Mobile</option>
-                      <option value="Orange Money">Orange Money</option>
-                      <option value="Virement Bancaire">Virement Bancaire</option>
-                    </select>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase">Réf. transaction</label>
-                    <input 
-                      type="text" 
-                      placeholder="W-4981"
-                      value={payForm.refNo}
-                      onChange={(e) => setPayForm(prev => ({ ...prev, refNo: e.target.value }))}
-                      className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <button 
-                type="submit"
-                className="cursor-pointer w-full py-2 bg-[#ee7b11] hover:bg-[#d66f0e] text-white font-extrabold text-xs rounded-xl flex items-center justify-center gap-1.5 transition pt-2"
-              >
-                <Banknote className="h-4 w-4" />
-                Valider l'Écrit de Caisse
-              </button>
-            </form>
-          </div>
-
-          {/* Installment details for selected student */}
-          {detailStudent && detailStudentBilling && (
-            <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs space-y-4">
-              <div className="border-b border-slate-100 pb-2 flex justify-between items-center">
-                <h4 className="text-xs font-black uppercase text-slate-755">
-                  Échéancier de Versements : {detailStudent.lastName} {detailStudent.firstName}
-                </h4>
-                <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
-                  detailStudent.assignmentStatus === 'Affecté' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-900 text-white'
-                }`}>
-                  {detailStudent.assignmentStatus === 'Affecté' ? 'Affecté' : 'Élève Privé'}
-                </span>
-              </div>
-
-              {detailStudent.assignmentStatus === 'Affecté' ? (
-                <p className="text-xs text-slate-500 leading-normal italic bg-slate-50 p-3 rounded-xl border border-slate-200">
-                  Les élèves affectés par l'État bénéficient d'un tarif forfaitaire subventionné et ne sont pas soumis à l'échéancier des versements trimestriels privés.
-                </p>
-              ) : detailStudentBilling.installments.length === 0 ? (
-                <p className="text-xs text-slate-400 italic text-center py-4">Aucun versement planifié pour cette classe.</p>
-              ) : (
-                <div className="space-y-3">
-                  {detailStudentBilling.installments.map((inst, idx) => (
-                    <div key={idx} className="p-3 bg-slate-50 border border-slate-150 rounded-xl space-y-2">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <span className="font-extrabold text-slate-800 text-xs block">{inst.label}</span>
-                          <span className="text-[10px] text-slate-450 font-bold block flex items-center gap-1">
-                            <Calendar className="h-3 w-3 text-slate-400" />
-                            Limite : {new Date(inst.dueDate).toLocaleDateString('fr-FR')}
-                          </span>
-                        </div>
-                        <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase ${
-                          inst.status === 'Payé' ? 'bg-emerald-100 text-emerald-800' :
-                          inst.status === 'Partiel' ? 'bg-amber-100 text-amber-800' :
-                          inst.status === 'En retard' ? 'bg-rose-100 text-rose-800 animate-pulse border border-rose-200' :
-                          'bg-slate-100 text-slate-500'
-                        }`}>
-                          {inst.status === 'Payé' ? 'Payé' :
-                           inst.status === 'Partiel' ? 'Partiel' :
-                           inst.status === 'En retard' ? 'En Retard ⚠️' :
-                           'En attente'}
-                        </span>
-                      </div>
-
-                      <div className="flex justify-between text-[11px] font-mono border-t border-slate-200/60 pt-1.5">
-                        <div>
-                          <span className="text-slate-400 font-bold">Attendu : </span>
-                          <strong className="text-slate-850 font-black">{inst.discountedAmount.toLocaleString()} FCFA</strong>
-                        </div>
-                        <div>
-                          <span className="text-slate-400 font-bold">Payé : </span>
-                          <strong className="text-emerald-700 font-black">{inst.paidAmount.toLocaleString()} FCFA</strong>
-                        </div>
-                        <div>
-                          <span className="text-slate-400 font-bold">Reste : </span>
-                          <strong className={inst.remainingAmount > 0 ? "text-rose-700 font-black" : "text-slate-700 font-black"}>
-                            {inst.remainingAmount.toLocaleString()} FCFA
-                          </strong>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded font-black font-mono">
+                Année Scolaire {academicYear}
+              </span>
             </div>
-          )}
-        </div>
 
-        {/* Right student accounting directory (7 cols) */}
-        <div className="lg:col-span-7 bg-white border border-slate-200 rounded-3xl p-5 shadow-xs overflow-hidden space-y-4">
-          <div className="flex justify-between items-center">
-            <h3 className="text-sm font-black text-slate-905 uppercase tracking-tight">Dossier de Facturation Élèves ({studentList.length})</h3>
-            <span className="text-[10.5px] bg-slate-900 text-white px-2.5 py-0.5 rounded-full font-bold">Total Encaissé : {globalTotalCollected.toLocaleString()} FCFA</span>
-          </div>
-
-          <div className="overflow-x-auto rounded-xl border border-slate-150">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="bg-slate-50 text-slate-450 border-b border-slate-250 font-black">
-                  <th className="p-2.5">Matricule</th>
-                  <th className="p-2.5">Nom d'Élève</th>
-                  <th className="p-2.5">Classe</th>
-                  <th className="p-2.5 w-28 text-center">Type</th>
-                  <th className="p-2.5 text-right">Scolarité Dûe</th>
-                  <th className="p-2.5 text-right text-emerald-800">Payé</th>
-                  <th className="p-2.5 text-right text-red-750">Reste</th>
-                  <th className="p-2.5 text-center">Fiche</th>
-                </tr>
-              </thead>
-              <tbody>
-                {studentList.map(std => {
-                  const bill = getStudentBillingSheet(std.id, std.classId);
-                  const isSelectedDetail = selectedStudentIdForDetail === std.id;
-                  
-                  return (
-                    <tr 
-                      key={std.id} 
-                      onClick={() => setSelectedStudentIdForDetail(std.id)}
-                      className={`border-b border-slate-100 hover:bg-slate-50/50 transition cursor-pointer ${
-                        isSelectedDetail ? 'bg-indigo-50/40' : ''
-                      }`}
-                    >
-                      <td className="p-2.5 font-mono text-[#0b4998] font-bold">{std.matricule}</td>
-                      <td className="p-2.5 font-extrabold text-slate-850 uppercase leading-none">
-                        {std.lastName} {std.firstName}
-                      </td>
-                      <td className="p-2.5 font-bold text-slate-500">{std.classId}</td>
-                      <td className="p-2.5 text-center" onClick={(e) => e.stopPropagation()}>
-                        <select
-                          value={std.assignmentStatus || 'Non Affecté'}
-                          onChange={(e) => updateStudentAssignmentStatus(std.id, e.target.value as any)}
-                          className={`p-1 rounded text-[10px] font-black border uppercase cursor-pointer ${
-                            std.assignmentStatus === 'Affecté'
-                              ? 'bg-indigo-50 border-indigo-200 text-indigo-750'
-                              : 'bg-slate-50 border-slate-200 text-slate-700'
-                          }`}
-                        >
-                          <option value="Non Affecté">Privé</option>
-                          <option value="Affecté">État (Affecté)</option>
-                        </select>
-                      </td>
-                      <td className="p-2.5 text-right font-semibold font-mono">
-                        {bill.finalInvoiceDue.toLocaleString()} FCFA
-                      </td>
-                      <td className="p-2.5 text-right text-emerald-850 font-mono font-black">{bill.totalPaid.toLocaleString()} FCFA</td>
-                      <td className="p-2.5 text-right text-red-750 font-mono font-black">{bill.balanceRemaining.toLocaleString()} FCFA</td>
-                      <td className="p-2.5 text-center">
-                        <button 
-                          className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
-                            isSelectedDetail ? 'bg-[#0b4998] text-white' : 'bg-slate-100 text-slate-500'
-                          }`}
-                        >
-                          Détails
-                        </button>
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-center">
+              
+              {/* Financial metrics breakdown table (8 cols) */}
+              <div className="lg:col-span-8 overflow-hidden rounded-2xl border border-slate-150">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-slate-50 text-slate-500 border-b border-slate-250 font-bold">
+                      <th className="p-3">Rubrique de Caisse</th>
+                      <th className="p-3 text-right">Montant Attendu</th>
+                      <th className="p-3 text-right text-emerald-800">Montant Encaissé (Payé)</th>
+                      <th className="p-3 text-right text-rose-750">Reste à Recouvrer</th>
+                      <th className="p-3 text-center">Taux d'Exécution</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr className="border-b border-slate-100 hover:bg-slate-50/40">
+                      <td className="p-3 font-extrabold text-slate-700">Droits d'Inscription</td>
+                      <td className="p-3 text-right font-mono font-bold">{ledgerSummary.expectedEnrollment.toLocaleString()} FCFA</td>
+                      <td className="p-3 text-right font-mono font-black text-emerald-850">+{ledgerSummary.paidEnrollment.toLocaleString()} FCFA</td>
+                      <td className="p-3 text-right font-mono font-bold text-rose-750">{ledgerSummary.remainingEnrollment.toLocaleString()} FCFA</td>
+                      <td className="p-3 text-center">
+                        <div className="flex items-center gap-2 justify-center">
+                          <div className="w-20 bg-slate-100 h-2 rounded-full overflow-hidden">
+                            <div className="bg-indigo-600 h-full" style={{ width: `${ledgerSummary.rateEnrollment}%` }}></div>
+                          </div>
+                          <span className="font-black text-indigo-700 w-8 text-right font-mono">{ledgerSummary.rateEnrollment}%</span>
+                        </div>
                       </td>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                    <tr className="border-b border-slate-100 hover:bg-slate-50/40">
+                      <td className="p-3 font-extrabold text-slate-700">Frais de Scolarité</td>
+                      <td className="p-3 text-right font-mono font-bold">{ledgerSummary.expectedTuition.toLocaleString()} FCFA</td>
+                      <td className="p-3 text-right font-mono font-black text-emerald-855">+{ledgerSummary.paidTuition.toLocaleString()} FCFA</td>
+                      <td className="p-3 text-right font-mono font-bold text-rose-750">{ledgerSummary.remainingTuition.toLocaleString()} FCFA</td>
+                      <td className="p-3 text-center">
+                        <div className="flex items-center gap-2 justify-center">
+                          <div className="w-20 bg-slate-100 h-2 rounded-full overflow-hidden">
+                            <div className="bg-[#ee7b11] h-full" style={{ width: `${ledgerSummary.rateTuition}%` }}></div>
+                          </div>
+                          <span className="font-black text-[#ee7b11] w-8 text-right font-mono">{ledgerSummary.rateTuition}%</span>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr className="bg-slate-100/50 font-black">
+                      <td className="p-3 text-[#0b4998] uppercase">Total Général</td>
+                      <td className="p-3 text-right font-mono text-[#0b4998]">{ledgerSummary.totalExpected.toLocaleString()} FCFA</td>
+                      <td className="p-3 text-right font-mono text-emerald-800">+{ledgerSummary.totalPaid.toLocaleString()} FCFA</td>
+                      <td className="p-3 text-right font-mono text-rose-750">{ledgerSummary.totalRemaining.toLocaleString()} FCFA</td>
+                      <td className="p-3 text-center">
+                        <div className="flex items-center gap-2 justify-center">
+                          <div className="w-20 bg-slate-200 h-2.5 rounded-full overflow-hidden">
+                            <div className="bg-emerald-600 h-full" style={{ width: `${ledgerSummary.rateTotal}%` }}></div>
+                          </div>
+                          <span className="font-extrabold text-emerald-800 w-8 text-right font-mono">{ledgerSummary.rateTotal}%</span>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Graphical Card (4 cols) */}
+              <div className="lg:col-span-4 bg-[#0b4998]/5 border border-[#0b4998]/20 rounded-2xl p-4 space-y-3 flex flex-col justify-between h-full min-h-[140px]">
+                <div>
+                  <span className="text-[10px] uppercase font-black text-indigo-750 block">Indice de Recouvrement</span>
+                  <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                    Le taux global d'exécution est à <strong className="text-[#0b4998]">{ledgerSummary.rateTotal}%</strong> avec un restant à recouvrer total de <strong className="text-rose-750">{ledgerSummary.totalRemaining.toLocaleString()} FCFA</strong>.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700">
+                    <ShieldCheck className="h-5.5 w-5.5" />
+                  </div>
+                  <div>
+                    <span className="text-[9px] uppercase font-bold text-slate-400 block">Caisse Établissement</span>
+                    <strong className="text-slate-800 font-mono font-black">{ledgerSummary.totalPaid.toLocaleString()} FCFA Encaissés</strong>
+                  </div>
+                </div>
+              </div>
+
+            </div>
           </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            
+            {/* Cashier Payment Form & Installment Status Detail (5 cols) */}
+            <div className="lg:col-span-5 space-y-6">
+              
+              {/* Cashier entry */}
+              <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs space-y-4">
+                <h3 className="text-xs font-black uppercase text-[#0b4998] tracking-widest flex items-center gap-1.5">
+                  <span>Encaissement Versement</span>
+                </h3>
+
+                <form onSubmit={handleRegisterPayment} className="space-y-3.5">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">Élève Payeur</label>
+                    <select
+                      value={payForm.studentId}
+                      onChange={(e) => setPayForm(prev => ({ ...prev, studentId: e.target.value }))}
+                      className="w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none"
+                    >
+                      {studentList.map(s => {
+                        const matchedClass = classes.find(c => c.id === s.classId)?.name || s.classId;
+                        const statusText = s.assignmentStatus === 'Affecté' ? 'Affecté État' : 'Privé';
+                        return (
+                          <option key={s.id} value={s.id}>{s.lastName} {s.firstName} ({matchedClass} - {statusText})</option>
+                        );
+                      })}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">Montant Versé (FCFA)</label>
+                    <input 
+                      type="number" 
+                      step="5000"
+                      required
+                      placeholder="ex: 15000"
+                      value={payForm.amount}
+                      onChange={(e) => setPayForm(prev => ({ ...prev, amount: parseInt(e.target.value) || 0 }))}
+                      className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black text-slate-800 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase">Mode paiement</label>
+                      <select
+                        value={payForm.paymentMethod}
+                        onChange={(e) => setPayForm(prev => ({ ...prev, paymentMethod: e.target.value as any }))}
+                        className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none"
+                      >
+                        <option value="Cash (Caisse)">Cash (Caisse)</option>
+                        <option value="Wave Mobile">Wave Mobile</option>
+                        <option value="Orange Money">Orange Money</option>
+                        <option value="Virement Bancaire">Virement Bancaire</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase">Réf. transaction</label>
+                      <input 
+                        type="text" 
+                        placeholder="W-4981"
+                        value={payForm.refNo}
+                        onChange={(e) => setPayForm(prev => ({ ...prev, refNo: e.target.value }))}
+                        className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <button 
+                  type="submit"
+                  className="cursor-pointer w-full py-2 bg-[#ee7b11] hover:bg-[#d66f0e] text-white font-extrabold text-xs rounded-xl flex items-center justify-center gap-1.5 transition pt-2"
+                >
+                  <Banknote className="h-4 w-4" />
+                  Valider l'Écrit de Caisse
+                </button>
+              </form>
+            </div>
+
+            {/* Installment details for selected student */}
+            {detailStudent && detailStudentBilling && (
+              <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs space-y-4">
+                <div className="border-b border-slate-100 pb-2 flex justify-between items-center">
+                  <h4 className="text-xs font-black uppercase text-slate-755">
+                    Échéancier de Versements : {detailStudent.lastName} {detailStudent.firstName}
+                  </h4>
+                  <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
+                    detailStudent.assignmentStatus === 'Affecté' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-900 text-white'
+                  }`}>
+                    {detailStudent.assignmentStatus === 'Affecté' ? 'Affecté' : 'Élève Privé'}
+                  </span>
+                </div>
+
+                {detailStudent.assignmentStatus === 'Affecté' ? (
+                  <p className="text-xs text-slate-500 leading-normal italic bg-slate-50 p-3 rounded-xl border border-slate-200">
+                    Les élèves affectés par l'État bénéficient d'un tarif forfaitaire subventionné et ne sont pas soumis à l'échéancier des versements trimestriels privés.
+                  </p>
+                ) : detailStudentBilling.installments.length === 0 ? (
+                  <p className="text-xs text-slate-400 italic text-center py-4">Aucun versement planifié pour cette classe.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {detailStudentBilling.installments.map((inst, idx) => (
+                      <div key={idx} className="p-3 bg-slate-50 border border-slate-150 rounded-xl space-y-2">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span className="font-extrabold text-slate-800 text-xs block">{inst.label}</span>
+                            <span className="text-[10px] text-slate-450 font-bold block flex items-center gap-1">
+                              <Calendar className="h-3 w-3 text-slate-400" />
+                              Limite : {new Date(inst.dueDate).toLocaleDateString('fr-FR')}
+                            </span>
+                          </div>
+                          <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase ${
+                            inst.status === 'Payé' ? 'bg-emerald-100 text-emerald-800' :
+                            inst.status === 'Partiel' ? 'bg-amber-100 text-amber-800' :
+                            inst.status === 'En retard' ? 'bg-rose-100 text-rose-800 animate-pulse border border-rose-200' :
+                            'bg-slate-100 text-slate-500'
+                          }`}>
+                            {inst.status === 'Payé' ? 'Payé' :
+                             inst.status === 'Partiel' ? 'Partiel' :
+                             inst.status === 'En retard' ? 'En Retard ⚠️' :
+                             'En attente'}
+                          </span>
+                        </div>
+
+                        <div className="flex justify-between text-[11px] font-mono border-t border-slate-200/60 pt-1.5">
+                          <div>
+                            <span className="text-slate-400 font-bold">Attendu : </span>
+                            <strong className="text-slate-850 font-black">{inst.discountedAmount.toLocaleString()} FCFA</strong>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 font-bold">Payé : </span>
+                            <strong className="text-emerald-700 font-black">{inst.paidAmount.toLocaleString()} FCFA</strong>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 font-bold">Reste : </span>
+                            <strong className={inst.remainingAmount > 0 ? "text-rose-700 font-black" : "text-slate-700 font-black"}>
+                              {inst.remainingAmount.toLocaleString()} FCFA
+                            </strong>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Right student accounting directory (7 cols) */}
+          <div className="lg:col-span-7 bg-white border border-slate-200 rounded-3xl p-5 shadow-xs overflow-hidden space-y-4">
+            <div className="flex justify-between items-center">
+              <h3 className="text-sm font-black text-slate-905 uppercase tracking-tight">Dossier de Facturation Élèves ({studentList.length})</h3>
+              <span className="text-[10.5px] bg-slate-900 text-white px-2.5 py-0.5 rounded-full font-bold">Total Encaissé : {globalTotalCollected.toLocaleString()} FCFA</span>
+            </div>
+
+            <div className="overflow-x-auto rounded-xl border border-slate-150">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-50 text-slate-450 border-b border-slate-250 font-black">
+                    <th className="p-2.5">Matricule</th>
+                    <th className="p-2.5">Nom d'Élève</th>
+                    <th className="p-2.5">Classe</th>
+                    <th className="p-2.5 w-28 text-center">Type</th>
+                    <th className="p-2.5 text-right">Scolarité Dûe</th>
+                    <th className="p-2.5 text-right text-emerald-800">Payé</th>
+                    <th className="p-2.5 text-right text-red-750">Reste</th>
+                    <th className="p-2.5 text-center">Fiche</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {studentList.map(std => {
+                    const bill = getStudentBillingSheet(std.id, std.classId);
+                    const isSelectedDetail = selectedStudentIdForDetail === std.id;
+                    
+                    return (
+                      <tr 
+                        key={std.id} 
+                        onClick={() => setSelectedStudentIdForDetail(std.id)}
+                        className={`border-b border-slate-100 hover:bg-slate-50/50 transition cursor-pointer ${
+                          isSelectedDetail ? 'bg-indigo-50/40' : ''
+                        }`}
+                      >
+                        <td className="p-2.5 font-mono text-[#0b4998] font-bold">{std.matricule}</td>
+                        <td className="p-2.5 font-extrabold text-slate-850 uppercase leading-none">
+                          {std.lastName} {std.firstName}
+                        </td>
+                        <td className="p-2.5 font-bold text-slate-500">{std.classId}</td>
+                        <td className="p-2.5 text-center" onClick={(e) => e.stopPropagation()}>
+                          <select
+                            value={std.assignmentStatus || 'Non Affecté'}
+                            onChange={(e) => updateStudentAssignmentStatus(std.id, e.target.value as any)}
+                            className={`p-1 rounded text-[10px] font-black border uppercase cursor-pointer ${
+                              std.assignmentStatus === 'Affecté'
+                                ? 'bg-indigo-50 border-indigo-200 text-indigo-750'
+                                : 'bg-slate-50 border-slate-200 text-slate-700'
+                            }`}
+                          >
+                            <option value="Non Affecté">Privé</option>
+                            <option value="Affecté">État (Affecté)</option>
+                          </select>
+                        </td>
+                        <td className="p-2.5 text-right font-semibold font-mono">
+                          {bill.finalInvoiceDue.toLocaleString()} FCFA
+                        </td>
+                        <td className="p-2.5 text-right text-emerald-850 font-mono font-black">{bill.totalPaid.toLocaleString()} FCFA</td>
+                        <td className="p-2.5 text-right text-red-750 font-mono font-black">{bill.balanceRemaining.toLocaleString()} FCFA</td>
+                        <td className="p-2.5 text-center">
+                          <button 
+                            className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
+                              isSelectedDetail ? 'bg-[#0b4998] text-white' : 'bg-slate-100 text-slate-500'
+                            }`}
+                          >
+                            Détails
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
         </div>
 
-      </div>
+        </div>
       )}
 
       {/* RENDER VIEW: TRANSACTION LEDGER & PRINT RECEIPT */}
@@ -1111,7 +1272,7 @@ export default function FinancialModule({
             </div>
 
             {scannerList.length === 0 ? (
-              <p className="text-xs text-slate-450 italic text-center py-8 bg-slate-50 border border-dashed rounded-xl">
+              <p className="text-xs text-slate-455 italic text-center py-8 bg-slate-50 border border-dashed rounded-xl">
                 ✓ Aucun retard de paiement détecté. Tous les élèves privés sont à jour de leurs tranches actives !
               </p>
             ) : (
@@ -1138,7 +1299,7 @@ export default function FinancialModule({
                       >
                         <td className="p-2.5">
                           <strong className="text-slate-800 uppercase block">{item.studentName}</strong>
-                          <span className="text-[9.5px] text-slate-450 block font-mono">Mat: {item.matricule} • Cl: {item.classId}</span>
+                          <span className="text-[9.5px] text-slate-455 block font-mono">Mat: {item.matricule} • Cl: {item.classId}</span>
                         </td>
                         <td className="p-2.5 font-semibold text-slate-600">{item.installmentLabel}</td>
                         <td className="p-2.5 text-center font-mono text-slate-550">
@@ -1285,7 +1446,7 @@ export default function FinancialModule({
           <div className="text-center border-b pb-4 mb-8">
             <h1 className="text-lg font-bold uppercase tracking-tight text-slate-950">{schoolName}</h1>
             <p className="text-[10px] uppercase font-bold tracking-widest text-slate-500 mt-1">{schoolSubName}</p>
-            <p className="text-[9px] italic text-slate-400 mt-0.5">"{schoolMotto}"</p>
+            <p className="text-[9px] italic text-slate-450 mt-0.5">"{schoolMotto}"</p>
             <div className="text-[10px] font-mono mt-2 text-slate-500">Année Académique : {academicYear}</div>
           </div>
 
