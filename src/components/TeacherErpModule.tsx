@@ -29,6 +29,13 @@ interface TeacherExtendedState {
   hiredDate: string;
 }
 
+interface TeacherPayrollAdjustment {
+  extraHours: number;
+  proctoringHours: number;
+  bonuses: number;
+  deductions: number;
+}
+
 export default function TeacherErpModule({
   teachers,
   setTeachers,
@@ -167,7 +174,7 @@ export default function TeacherErpModule({
   };
 
   // UI state
-  const [activeTab, setActiveTab] = useState<'hiring' | 'loads' | 'attendance'>('hiring');
+  const [activeTab, setActiveTab] = useState<'hiring' | 'loads' | 'attendance' | 'payroll'>('hiring');
   
   // Form Recruitment
   const [recruitForm, setRecruitForm] = useState({
@@ -181,6 +188,248 @@ export default function TeacherErpModule({
     monthlyBaseSalary: 350000,
     selectedSubjects: [] as string[]
   });
+
+  // Payroll adjustments database
+  const [payrollAdjustments, setPayrollAdjustments] = useState<Record<string, TeacherPayrollAdjustment>>(() => {
+    const saved = localStorage.getItem('erp_teachers_payroll_adjustments');
+    return saved ? JSON.parse(saved) : {};
+  });
+
+  const savePayrollAdjustments = (data: Record<string, TeacherPayrollAdjustment>) => {
+    setPayrollAdjustments(data);
+    localStorage.setItem('erp_teachers_payroll_adjustments', JSON.stringify(data));
+  };
+
+  const handleUpdatePayrollAdjustment = (teacherId: string, field: keyof TeacherPayrollAdjustment, value: number) => {
+    const current = payrollAdjustments[teacherId] || { extraHours: 0, proctoringHours: 0, bonuses: 0, deductions: 0 };
+    const updated = {
+      ...payrollAdjustments,
+      [teacherId]: {
+        ...current,
+        [field]: value
+      }
+    };
+    savePayrollAdjustments(updated);
+  };
+
+  const handleGeneratePayslipPDF = (teacher: TeacherItem) => {
+    const ext = extendedData[teacher.id] || { phone: '+225 00 00 00 00', contractType: 'Permanent (CDI)', monthlyBaseSalary: 350000, hiredDate: 'En cours' };
+    const adj = payrollAdjustments[teacher.id] || { extraHours: 0, proctoringHours: 0, bonuses: 0, deductions: 0 };
+    const schoolName = localStorage.getItem('barakat_school_name') || "ÉCOLE DES FAMILLES";
+    const academicYear = localStorage.getItem('barakat_academic_year') || "2025-2026";
+    const director = localStorage.getItem('barakat_school_director') || "La Direction";
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    // Calculation logic
+    const isVacataire = ext.contractType.includes('Vacataire');
+    const scheduledHours = courses.filter(c => c.teacherId === teacher.id).length;
+    const monthlyRegularHours = scheduledHours * 4;
+    
+    let basePay = 0;
+    let baseRateLabel = "";
+    let baseRateValue = 0;
+    
+    if (isVacataire) {
+      baseRateValue = ext.monthlyBaseSalary; // acting as hourly rate
+      basePay = monthlyRegularHours * baseRateValue;
+      baseRateLabel = `${baseRateValue.toLocaleString()} FCFA / h`;
+    } else {
+      basePay = ext.monthlyBaseSalary;
+      baseRateLabel = "Forfait Mensuel";
+    }
+
+    const extraHoursRate = isVacataire ? baseRateValue * 1.25 : 10000;
+    const extraHoursPay = adj.extraHours * extraHoursRate;
+    
+    const proctoringRate = 7500;
+    const proctoringPay = adj.proctoringHours * proctoringRate;
+    
+    const grossPay = basePay + extraHoursPay + proctoringPay + adj.bonuses;
+    const netPay = grossPay - adj.deductions;
+
+    let extraHoursRow = '';
+    if (adj.extraHours > 0) {
+      extraHoursRow = `
+        <tr>
+          <td>Heures Supplémentaires (Majorées)</td>
+          <td class="num">${extraHoursRate.toLocaleString()} FCFA / h</td>
+          <td class="num">${adj.extraHours} h</td>
+          <td class="num">${extraHoursPay.toLocaleString()}</td>
+          <td class="num">-</td>
+        </tr>
+      `;
+    }
+
+    let proctoringRow = '';
+    if (adj.proctoringHours > 0) {
+      proctoringRow = `
+        <tr>
+          <td>Devoirs Surveillés / Examens</td>
+          <td class="num">${proctoringRate.toLocaleString()} FCFA / h</td>
+          <td class="num">${adj.proctoringHours} h</td>
+          <td class="num">${proctoringPay.toLocaleString()}</td>
+          <td class="num">-</td>
+        </tr>
+      `;
+    }
+
+    let bonusesRow = '';
+    if (adj.bonuses > 0) {
+      bonusesRow = `
+        <tr>
+          <td>Primes et Indemnités Exceptionnelles</td>
+          <td class="num">-</td>
+          <td class="num">1</td>
+          <td class="num">${adj.bonuses.toLocaleString()}</td>
+          <td class="num">-</td>
+        </tr>
+      `;
+    }
+
+    let deductionsRow = '';
+    if (adj.deductions > 0) {
+      deductionsRow = `
+        <tr>
+          <td>Retenues sur Salaire (Retards/Absences/Avances)</td>
+          <td class="num">-</td>
+          <td class="num">1</td>
+          <td class="num">-</td>
+          <td class="num">${adj.deductions.toLocaleString()}</td>
+        </tr>
+      `;
+    }
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Bulletin de Paie - ${teacher.name}</title>
+          <style>
+            body { font-family: 'Courier New', Courier, monospace; padding: 30px; color: #000; font-size: 12px; max-width: 750px; margin: 0 auto; line-height: 1.4; }
+            .header-table { width: 100%; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px; }
+            .title { text-align: center; font-size: 16px; font-weight: bold; text-decoration: underline; margin-bottom: 20px; }
+            .info-table { width: 100%; margin-bottom: 20px; }
+            .info-table td { padding: 4px; }
+            .payroll-table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+            .payroll-table th, .payroll-table td { border: 1px solid #000; padding: 6px 10px; text-align: left; }
+            .payroll-table th { background-color: #f2f2f2; }
+            .payroll-table .num { text-align: right; }
+            .summary-box { width: 100%; display: flex; justify-content: flex-end; margin-bottom: 30px; }
+            .summary-table { width: 50%; border-collapse: collapse; }
+            .summary-table td { border: 1px solid #000; padding: 6px 10px; font-weight: bold; }
+            .signatures { display: flex; justify-content: space-between; margin-top: 40px; }
+            .sig-block { width: 45%; text-align: center; }
+            .sig-space { height: 70px; }
+            @media print {
+              body { padding: 10px; }
+            }
+          </style>
+        </head>
+        <body>
+          <table class="header-table">
+            <tr>
+              <td style="font-weight: bold; font-size: 14px;">${schoolName.toUpperCase()}</td>
+              <td style="text-align: right; font-weight: bold;">BULLETIN DE PAIE</td>
+            </tr>
+            <tr>
+              <td>Année Scolaire : ${academicYear}</td>
+              <td style="text-align: right;">Période : ${new Date().toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }).toUpperCase()}</td>
+            </tr>
+          </table>
+
+          <table class="info-table">
+            <tr>
+              <td style="width: 15%; font-weight: bold;">MATRICULE :</td>
+              <td style="width: 35%;">${teacher.id}</td>
+              <td style="width: 20%; font-weight: bold;">NOM DE L'ENSEIGNANT :</td>
+              <td style="width: 30%;">${teacher.name}</td>
+            </tr>
+            <tr>
+              <td style="font-weight: bold;">CONTRAT :</td>
+              <td>${ext.contractType}</td>
+              <td style="font-weight: bold;">TÉLÉPHONE :</td>
+              <td>${ext.phone}</td>
+            </tr>
+            <tr>
+              <td style="font-weight: bold;">EMAIL :</td>
+              <td colspan="3">${teacher.email || 'Non spécifié'}</td>
+            </tr>
+          </table>
+
+          <div class="title">DÉTAIL DES ÉMOLUMENTS ET INDEMNITÉS</div>
+
+          <table class="payroll-table">
+            <thead>
+              <tr>
+                <th>Rubrique / Libellé</th>
+                <th class="num">Base / Taux</th>
+                <th class="num">Nombre / Quantité</th>
+                <th class="num">Gain (FCFA)</th>
+                <th class="num">Retenue (FCFA)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- Base Pay -->
+              <tr>
+                <td>Salaire / Honoraires de Base</td>
+                <td class="num">${baseRateLabel}</td>
+                <td class="num">${isVacataire ? `${monthlyRegularHours} heures` : '1'}</td>
+                <td class="num">${basePay.toLocaleString()}</td>
+                <td class="num">-</td>
+              </tr>
+              <!-- Extra Hours -->
+              ${extraHoursRow}
+              <!-- Proctoring / Exam Hours -->
+              ${proctoringRow}
+              <!-- Bonuses -->
+              ${bonusesRow}
+              <!-- Deductions -->
+              ${deductionsRow}
+            </tbody>
+          </table>
+
+          <div class="summary-box">
+            <table class="summary-table">
+              <tr>
+                <td>TOTAL BRUT :</td>
+                <td style="text-align: right;">${grossPay.toLocaleString()} FCFA</td>
+              </tr>
+              <tr>
+                <td>TOTAL RETENUES :</td>
+                <td style="text-align: right;">${adj.deductions.toLocaleString()} FCFA</td>
+              </tr>
+              <tr style="background-color: #f2f2f2; font-size: 14px;">
+                <td>NET À PAYER :</td>
+                <td style="text-align: right; color: #0b4998;">${netPay.toLocaleString()} FCFA</td>
+              </tr>
+            </table>
+          </div>
+
+          <div class="signatures">
+            <div class="sig-block">
+              <strong>Le Bénéficiaire</strong><br/>
+              <span style="font-size: 9px;">Signature précédée de la mention "Reçu"</span>
+              <div class="sig-space"></div>
+            </div>
+            <div class="sig-block">
+              <strong>La Caisse / La Direction</strong><br/>
+              <span style="font-size: 9px;">Le Directeur ${director}</span>
+              <div class="sig-space"></div>
+            </div>
+          </div>
+
+          <script>
+            window.onload = function() {
+              window.print();
+              setTimeout(function() { window.close(); }, 500);
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
 
   // Editing teacher state
   const [editingTeacher, setEditingTeacher] = useState<TeacherItem | null>(null);
@@ -497,6 +746,15 @@ export default function TeacherErpModule({
             <Activity className="h-4 w-4" />
             Pointage Présences
           </button>
+          <button 
+            onClick={() => setActiveTab('payroll')}
+            className={`cursor-pointer px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+              activeTab === 'payroll' ? 'bg-[#ee7b11] text-white shadow-xs' : 'bg-white text-slate-600 border border-slate-200'
+            }`}
+          >
+            <span className="text-xs">🪙</span>
+            Honoraires & Émoluments
+          </button>
         </div>
       </div>
 
@@ -584,7 +842,7 @@ export default function TeacherErpModule({
                   </select>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase">Salaire Base (FCFA)</label>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase">Salaire Base / Taux Horaire (FCFA)</label>
                   <input 
                     type="number" 
                     value={recruitForm.monthlyBaseSalary}
@@ -899,6 +1157,225 @@ export default function TeacherErpModule({
         </div>
       )}
 
+      {/* RENDER TAB: PAYROLL & HONORAIRES */}
+      {activeTab === 'payroll' && (
+        <div className="space-y-6">
+          {/* Summary Stats Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl flex items-center justify-between shadow-inner">
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase block">Total Masse Salariale</span>
+                <span className="text-base font-black text-indigo-700 font-mono">
+                  {teachers.reduce((acc, t) => {
+                    const ext = extendedData[t.id] || { contractType: 'Permanent (CDI)', monthlyBaseSalary: 350000 };
+                    const adj = payrollAdjustments[t.id] || { extraHours: 0, proctoringHours: 0, bonuses: 0, deductions: 0 };
+                    const isVacataire = ext.contractType.includes('Vacataire');
+                    const regularHours = courses.filter(c => c.teacherId === t.id).length * 4;
+                    const basePay = isVacataire ? regularHours * ext.monthlyBaseSalary : ext.monthlyBaseSalary;
+                    const extraRate = isVacataire ? ext.monthlyBaseSalary * 1.25 : 10000;
+                    const extraPay = adj.extraHours * extraRate;
+                    const proctoringPay = adj.proctoringHours * 7500;
+                    const gross = basePay + extraPay + proctoringPay + adj.bonuses;
+                    const net = gross - adj.deductions;
+                    return acc + net;
+                  }, 0).toLocaleString()} FCFA
+                </span>
+              </div>
+              <span className="text-2xl">💰</span>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl flex items-center justify-between shadow-inner">
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase block">Permanents (Fixed)</span>
+                <span className="text-base font-black text-slate-800">
+                  {teachers.filter(t => {
+                    const ext = extendedData[t.id] || { contractType: 'Permanent (CDI)' };
+                    return !ext.contractType.includes('Vacataire');
+                  }).length} enseignants
+                </span>
+              </div>
+              <span className="text-2xl">👔</span>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl flex items-center justify-between shadow-inner">
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase block">Vacataires (Hourly)</span>
+                <span className="text-base font-black text-slate-800">
+                  {teachers.filter(t => {
+                    const ext = extendedData[t.id] || { contractType: 'Permanent (CDI)' };
+                    return ext.contractType.includes('Vacataire');
+                  }).length} enseignants
+                </span>
+              </div>
+              <span className="text-2xl">⏱️</span>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl flex items-center justify-between shadow-inner">
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase block">Heures Sup. & Devoirs</span>
+                <span className="text-base font-black text-[#ee7b11] font-mono">
+                  {teachers.reduce((acc, t) => {
+                    const adj = payrollAdjustments[t.id] || { extraHours: 0, proctoringHours: 0, bonuses: 0, deductions: 0 };
+                    return acc + adj.extraHours + adj.proctoringHours;
+                  }, 0)} h cumulées
+                </span>
+              </div>
+              <span className="text-2xl">📝</span>
+            </div>
+          </div>
+
+          {/* Payroll calculation table */}
+          <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs space-y-4">
+            <div className="flex justify-between items-center pb-2 border-b border-indigo-50">
+              <div>
+                <h3 className="text-sm font-black text-slate-900 uppercase">Calcul et Répartition Mensuelle des Émoluments</h3>
+                <p className="text-[11px] text-slate-400">Modifiez directement les heures supplémentaires, de surveillance et primes en cours de mois.</p>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto rounded-2xl border border-slate-200">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 text-slate-450 border-b border-slate-200 text-[10px] font-black uppercase tracking-wider">
+                    <th className="p-3">Enseignant</th>
+                    <th className="p-3">Type & Base</th>
+                    <th className="p-3 text-center">Cours Planifiés</th>
+                    <th className="p-3 text-center">Heures Sup. (h)</th>
+                    <th className="p-3 text-center">Devoirs/Exams (h)</th>
+                    <th className="p-3 text-center">Primes (FCFA)</th>
+                    <th className="p-3 text-center">Retenues (FCFA)</th>
+                    <th className="p-3 text-right">Net à Payer (Est.)</th>
+                    <th className="p-3 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {teachers.map(t => {
+                    const ext = extendedData[t.id] || { contractType: 'Permanent (CDI)', monthlyBaseSalary: 350000 };
+                    const adj = payrollAdjustments[t.id] || { extraHours: 0, proctoringHours: 0, bonuses: 0, deductions: 0 };
+                    const isVacataire = ext.contractType.includes('Vacataire');
+                    const scheduledHours = courses.filter(c => c.teacherId === t.id).length;
+                    const monthlyRegularHours = scheduledHours * 4;
+
+                    let basePay = 0;
+                    if (isVacataire) {
+                      basePay = monthlyRegularHours * ext.monthlyBaseSalary;
+                    } else {
+                      basePay = ext.monthlyBaseSalary;
+                    }
+
+                    const extraRate = isVacataire ? ext.monthlyBaseSalary * 1.25 : 10000;
+                    const extraPay = adj.extraHours * extraRate;
+                    const proctoringPay = adj.proctoringHours * 7500;
+                    
+                    const gross = basePay + extraPay + proctoringPay + adj.bonuses;
+                    const net = gross - adj.deductions;
+
+                    return (
+                      <tr key={t.id} className="border-b border-slate-100 hover:bg-slate-50/50 text-xs transition">
+                        {/* Name */}
+                        <td className="p-3">
+                          <span className="font-extrabold text-slate-900 block">{t.name}</span>
+                          <span className="text-[9px] font-mono text-[#0b4998] block uppercase">{t.id}</span>
+                        </td>
+                        
+                        {/* Base type and Salary */}
+                        <td className="p-3">
+                          <span className={`inline-block px-1.5 py-0.2 rounded text-[8.5px] font-black uppercase ${isVacataire ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>
+                            {ext.contractType}
+                          </span>
+                          <span className="text-[10px] font-mono font-bold text-slate-500 block mt-0.5">
+                            {ext.monthlyBaseSalary.toLocaleString()} {isVacataire ? 'FCFA/h' : 'FCFA/mois'}
+                          </span>
+                        </td>
+
+                        {/* Scheduled hours */}
+                        <td className="p-3 text-center font-bold">
+                          <span className="text-[#ee7b11]">{scheduledHours}h/sem</span>
+                          <span className="text-[10px] text-slate-400 block mt-0.5">{monthlyRegularHours}h/mois</span>
+                        </td>
+
+                        {/* Extra Hours Input */}
+                        <td className="p-3 text-center">
+                          <input 
+                            type="number"
+                            min="0"
+                            value={adj.extraHours || 0}
+                            onChange={(e) => handleUpdatePayrollAdjustment(t.id, 'extraHours', parseInt(e.target.value) || 0)}
+                            className="w-16 px-1.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-center font-bold text-slate-700 focus:outline-none focus:bg-white"
+                          />
+                        </td>
+
+                        {/* Proctoring Hours Input */}
+                        <td className="p-3 text-center">
+                          <input 
+                            type="number"
+                            min="0"
+                            value={adj.proctoringHours || 0}
+                            onChange={(e) => handleUpdatePayrollAdjustment(t.id, 'proctoringHours', parseInt(e.target.value) || 0)}
+                            className="w-16 px-1.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-center font-bold text-slate-700 focus:outline-none focus:bg-white"
+                          />
+                        </td>
+
+                        {/* Bonuses Input */}
+                        <td className="p-3 text-center">
+                          <input 
+                            type="number"
+                            min="0"
+                            value={adj.bonuses || 0}
+                            onChange={(e) => handleUpdatePayrollAdjustment(t.id, 'bonuses', parseInt(e.target.value) || 0)}
+                            className="w-24 px-1.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-right font-bold text-slate-700 focus:outline-none focus:bg-white"
+                          />
+                        </td>
+
+                        {/* Deductions Input */}
+                        <td className="p-3 text-center">
+                          <input 
+                            type="number"
+                            min="0"
+                            value={adj.deductions || 0}
+                            onChange={(e) => handleUpdatePayrollAdjustment(t.id, 'deductions', parseInt(e.target.value) || 0)}
+                            className="w-24 px-1.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-right font-bold text-rose-600 focus:outline-none focus:bg-white"
+                          />
+                        </td>
+
+                        {/* Net salary calculated live */}
+                        <td className="p-3 text-right font-mono font-black text-[#0b4998]">
+                          {net.toLocaleString()} FCFA
+                        </td>
+
+                        {/* Actions */}
+                        <td className="p-3 text-right">
+                          <button
+                            onClick={() => handleGeneratePayslipPDF(t)}
+                            className="cursor-pointer px-3 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-[9px] font-black uppercase transition inline-flex items-center gap-1"
+                            title="Imprimer le Bulletin de Paie"
+                          >
+                            <span>🧾 Bulletin</span>
+                          </button>
+                        </td>
+
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Note on rates */}
+            <div className="p-3 bg-slate-50 rounded-2xl border border-slate-150 text-[10px] text-slate-500 font-semibold space-y-1">
+              <span className="font-bold text-[#0b4998] block">ℹ️ Barèmes de calcul par défaut :</span>
+              <ul className="list-disc pl-4 space-y-0.5">
+                <li><strong>Enseignant Permanent :</strong> Salaire Mensuel Fixe. Heures supplémentaires payées au tarif fixe de 10 000 FCFA / h.</li>
+                <li><strong>Enseignant Vacataire :</strong> Honoraires calculés sur les heures planifiées (nombre d'heures hebdomadaire × 4 semaines × taux horaire de base).</li>
+                <li><strong>Heures Supplémentaires Vacataires :</strong> Majorées de +25% par rapport au taux horaire de base de l'enseignant.</li>
+                <li><strong>Devoirs surveillés / Examens (tous statuts) :</strong> Indemnisés au forfait uniforme de 7 500 FCFA / h.</li>
+              </ul>
+            </div>
+
+          </div>
+        </div>
+      )}
+
       {/* RENDER MODAL: EDIT TEACHER */}
       {editingTeacher && editForm && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto">
@@ -981,7 +1458,7 @@ export default function TeacherErpModule({
 
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-[#ee7b11] uppercase">Type de Contrat</label>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase">Type de Contrat</label>
                   <select
                     value={editForm.contractType}
                     onChange={(e) => setEditForm(prev => prev ? ({ ...prev, contractType: e.target.value as any }) : null)}
@@ -993,7 +1470,7 @@ export default function TeacherErpModule({
                   </select>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase">Salaire Base (FCFA)</label>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase">Salaire Base / Taux Horaire (FCFA)</label>
                   <input 
                     type="number" 
                     value={editForm.monthlyBaseSalary}
