@@ -53,6 +53,9 @@ interface StudentRecord {
   examCenter?: string; // Assigned composition center
   jury?: string;
   isRegisteredMock?: Record<string, boolean>; // mockExamId -> registered
+  birthCertNumber?: string;
+  birthCertDate?: string;
+  birthCertPlace?: string;
 }
 
 interface MockExamMark {

@@ -44,6 +44,9 @@ interface StudentRecord {
   photo?: string;
   city?: string;
   accessCode?: string;
+  birthCertNumber?: string;
+  birthCertDate?: string;
+  birthCertPlace?: string;
 }
 
 interface StudentMark {
@@ -83,11 +86,11 @@ export function ToolsTab({ classes, schoolName, academicYear, setAcademicYear }:
     } else {
       // Fallback defaults
       const defaults: StudentRecord[] = [
-        { id: 'std_1', firstName: 'Koffi', lastName: 'Yao Anderson', gender: 'M', birthDate: '2014-04-12', classId: '6A', tutorName: 'Koffi Blaise', tutorPhone: '+225 07 41 85 96 03', status: 'Inscrit', matricule: 'M-2026-4102', matriculeNat: 'CI-0125-9831K', photo: '', city: 'Cocody, Abidjan' },
-        { id: 'std_2', firstName: 'Diomandé', lastName: 'Aminata', gender: 'F', birthDate: '2013-08-19', classId: '6B', tutorName: 'Diomandé Lanciné', tutorPhone: '+225 05 52 41 12 74', status: 'Réinscrit', matricule: 'M-2024-1185', matriculeNat: 'CI-0124-7744D', photo: '', city: 'Marcory, Abidjan' },
-        { id: 'std_3', firstName: 'Kouassi', lastName: 'Koffi Charles', gender: 'M', birthDate: '2012-11-05', classId: '3A', tutorName: 'Mme Kouassi Hortense', tutorPhone: '+225 07 09 85 12 43', status: 'Inscrit', matricule: 'M-2026-9981', matriculeNat: 'CI-0125-1109C', photo: '', city: 'Bingerville' },
-        { id: 'std_4', firstName: 'Sylla', lastName: 'Ibrahim Karim', gender: 'M', birthDate: '2010-01-30', classId: '3B', tutorName: 'Sylla Fatoumata', tutorPhone: '+225 01 02 03 04 05', status: 'Réinscrit', matricule: 'M-2023-0056', matriculeNat: 'CI-0123-5591I', photo: '', city: 'Plateau' },
-        { id: 'std_5', firstName: 'Gomez', lastName: 'Marie-Chantal Enola', gender: 'F', birthDate: '2008-07-21', classId: '3A', tutorName: 'Gomez Robert (Ambass.)', tutorPhone: '+225 07 41 02 85 96', status: 'Inscrit', matricule: 'M-2026-0103', matriculeNat: 'CI-0125-0044E', photo: '', city: 'Cocody Riviera' }
+        { id: 'std_1', firstName: 'Koffi', lastName: 'Yao Anderson', gender: 'M', birthDate: '2014-04-12', classId: '6A', tutorName: 'Koffi Blaise', tutorPhone: '+225 07 41 85 96 03', status: 'Inscrit', matricule: 'M-2026-4102', matriculeNat: 'CI-0125-9831K', photo: '', city: 'Cocody, Abidjan', birthCertNumber: '1024/2014', birthCertDate: '2014-04-20', birthCertPlace: 'Cocody' },
+        { id: 'std_2', firstName: 'Diomandé', lastName: 'Aminata', gender: 'F', birthDate: '2013-08-19', classId: '6B', tutorName: 'Diomandé Lanciné', tutorPhone: '+225 05 52 41 12 74', status: 'Réinscrit', matricule: 'M-2024-1185', matriculeNat: 'CI-0124-7744D', photo: '', city: 'Marcory, Abidjan', birthCertNumber: '552/2013', birthCertDate: '2013-08-25', birthCertPlace: 'Marcory' },
+        { id: 'std_3', firstName: 'Kouassi', lastName: 'Koffi Charles', gender: 'M', birthDate: '2012-11-05', classId: '3A', tutorName: 'Mme Kouassi Hortense', tutorPhone: '+225 07 09 85 12 43', status: 'Inscrit', matricule: 'M-2026-9981', matriculeNat: 'CI-0125-1109C', photo: '', city: 'Bingerville', birthCertNumber: '112/2012', birthCertDate: '2012-11-12', birthCertPlace: 'Bingerville' },
+        { id: 'std_4', firstName: 'Sylla', lastName: 'Ibrahim Karim', gender: 'M', birthDate: '2010-01-30', classId: '3B', tutorName: 'Sylla Fatoumata', tutorPhone: '+225 01 02 03 04 05', status: 'Réinscrit', matricule: 'M-2023-0056', matriculeNat: 'CI-0123-5591I', photo: '', city: 'Plateau', birthCertNumber: '92/2010', birthCertDate: '2010-02-05', birthCertPlace: 'Plateau' },
+        { id: 'std_5', firstName: 'Gomez', lastName: 'Marie-Chantal Enola', gender: 'F', birthDate: '2008-07-21', classId: '3A', tutorName: 'Gomez Robert (Ambass.)', tutorPhone: '+225 07 41 02 85 96', status: 'Inscrit', matricule: 'M-2026-0103', matriculeNat: 'CI-0125-0044E', photo: '', city: 'Cocody Riviera', birthCertNumber: '401/2008', birthCertDate: '2008-07-28', birthCertPlace: 'Cocody' }
       ];
       setStudents(defaults);
       localStorage.setItem('erp_student_records', JSON.stringify(defaults));
@@ -248,9 +251,9 @@ export function ToolsTab({ classes, schoolName, academicYear, setAcademicYear }:
 
   const handleDownloadTemplate = () => {
     // Semicolon-separated CSV template for French Excel compatibility
-    const headers = "Nom;Prenoms;Genre;DateNaissance;Classe;NomTuteur;TelephoneTuteur;Statut;MatriculeNational;Ville";
-    const example1 = "YAO;Koffi Anderson;M;2014-04-12;6A;Koffi Blaise;+225 07 41 85 96 03;Inscrit;CI-0125-9831K;Abidjan";
-    const example2 = "DIOMANDE;Aminata;F;2013-08-19;6B;Diomande Lancine;+225 05 52 41 12 74;Reinscrit;CI-0124-7744D;Yamoussoukro";
+    const headers = "Nom;Prenoms;Genre;DateNaissance;Classe;NomTuteur;TelephoneTuteur;Statut;MatriculeNational;Ville;NumActeNaissance;DateEtablissementActe;LieuEtablissementActe";
+    const example1 = "YAO;Koffi Anderson;M;2014-04-12;6A;Koffi Blaise;+225 07 41 85 96 03;Inscrit;CI-0125-9831K;Abidjan;1024/2014;2014-04-20;Cocody";
+    const example2 = "DIOMANDE;Aminata;F;2013-08-19;6B;Diomande Lancine;+225 05 52 41 12 74;Reinscrit;CI-0124-7744D;Yamoussoukro;552/2013;2013-08-25;Marcory";
     
     const csvContent = "\uFEFF" + [headers, example1, example2].join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -309,7 +312,7 @@ export function ToolsTab({ classes, schoolName, academicYear, setAcademicYear }:
         continue;
       }
 
-      const [lastName, firstName, genderStr, birthDate, classInput, tutorName, tutorPhone, statusInput, matriculeNat, city] = columns;
+      const [lastName, firstName, genderStr, birthDate, classInput, tutorName, tutorPhone, statusInput, matriculeNat, city, birthCertNumber, birthCertDate, birthCertPlace] = columns;
 
       if (!lastName || !firstName) {
         errors.push(`Ligne ${i + 1} ignorée: Le Nom et le Prénom sont obligatoires.`);
@@ -344,7 +347,10 @@ export function ToolsTab({ classes, schoolName, academicYear, setAcademicYear }:
         matricule: generatedMatricule,
         matriculeNat: matriculeNat || '',
         city: city || 'Abidjan',
-        photo: ''
+        photo: '',
+        birthCertNumber: birthCertNumber || '',
+        birthCertDate: birthCertDate || '',
+        birthCertPlace: birthCertPlace || ''
       });
       successCount++;
     }

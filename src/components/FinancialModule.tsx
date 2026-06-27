@@ -71,6 +71,9 @@ interface StudentRecord {
   assignmentStatus?: 'Affecté' | 'Non Affecté';
   tutorName?: string;
   tutorPhone?: string;
+  birthCertNumber?: string;
+  birthCertDate?: string;
+  birthCertPlace?: string;
 }
 
 interface ReminderLog {

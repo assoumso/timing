@@ -38,6 +38,9 @@ interface StudentRecord {
   photo?: string;
   city: string;
   lv2?: string; // Langue Vivante 2 (Espagnol, Allemand, etc.)
+  birthCertNumber?: string;
+  birthCertDate?: string;
+  birthCertPlace?: string;
 }
 
 export default function StudentModule({
@@ -54,11 +57,11 @@ export default function StudentModule({
     if (saved) return JSON.parse(saved);
     // realistic default students (Côte d'Ivoire accents & names + mock photos and matricules nationales)
     return [
-      { id: 'std_1', firstName: 'Koffi', lastName: 'Yao Anderson', gender: 'M', birthDate: '2014-04-12', classId: '6A', tutorName: 'Koffi Blaise', tutorPhone: '+225 07 41 85 96 03', status: 'Inscrit', matricule: 'M-2026-4102', matriculeNat: 'CI-0125-9831K', photo: '', city: 'Cocody, Abidjan', lv2: 'Espagnol' },
-      { id: 'std_2', firstName: 'Diomandé', lastName: 'Aminata', gender: 'F', birthDate: '2013-08-19', classId: '6B', tutorName: 'Diomandé Lanciné', tutorPhone: '+225 05 52 41 12 74', status: 'Réinscrit', matricule: 'M-2024-1185', matriculeNat: 'CI-0124-7744D', photo: '', city: 'Marcory, Abidjan', lv2: 'Allemand' },
-      { id: 'std_3', firstName: 'Kouassi', lastName: 'Koffi Charles', gender: 'M', birthDate: '2012-11-05', classId: '3A', tutorName: 'Mme Kouassi Hortense', tutorPhone: '+225 07 09 85 12 43', status: 'Inscrit', matricule: 'M-2026-9981', matriculeNat: 'CI-0125-1109C', photo: '', city: 'Bingerville', lv2: 'Espagnol' },
-      { id: 'std_4', firstName: 'Sylla', lastName: 'Ibrahim Karim', gender: 'M', birthDate: '2010-01-30', classId: '3B', tutorName: 'Sylla Fatoumata', tutorPhone: '+225 01 02 03 04 05', status: 'Réinscrit', matricule: 'M-2023-0056', matriculeNat: 'CI-0123-5591I', photo: '', city: 'Plateau', lv2: 'Allemand' },
-      { id: 'std_5', firstName: 'Gomez', lastName: 'Marie-Chantal Enola', gender: 'F', birthDate: '2008-07-21', classId: '3A', tutorName: 'Gomez Robert (Ambass.)', tutorPhone: '+225 07 41 02 85 96', status: 'Inscrit', matricule: 'M-2026-0103', matriculeNat: 'CI-0125-0044E', photo: '', city: 'Cocody Riviera', lv2: 'Espagnol' }
+      { id: 'std_1', firstName: 'Koffi', lastName: 'Yao Anderson', gender: 'M', birthDate: '2014-04-12', classId: '6A', tutorName: 'Koffi Blaise', tutorPhone: '+225 07 41 85 96 03', status: 'Inscrit', matricule: 'M-2026-4102', matriculeNat: 'CI-0125-9831K', photo: '', city: 'Cocody, Abidjan', lv2: 'Espagnol', birthCertNumber: '1024/2014', birthCertDate: '2014-04-20', birthCertPlace: 'Cocody' },
+      { id: 'std_2', firstName: 'Diomandé', lastName: 'Aminata', gender: 'F', birthDate: '2013-08-19', classId: '6B', tutorName: 'Diomandé Lanciné', tutorPhone: '+225 05 52 41 12 74', status: 'Réinscrit', matricule: 'M-2024-1185', matriculeNat: 'CI-0124-7744D', photo: '', city: 'Marcory, Abidjan', lv2: 'Allemand', birthCertNumber: '552/2013', birthCertDate: '2013-08-25', birthCertPlace: 'Marcory' },
+      { id: 'std_3', firstName: 'Kouassi', lastName: 'Koffi Charles', gender: 'M', birthDate: '2012-11-05', classId: '3A', tutorName: 'Mme Kouassi Hortense', tutorPhone: '+225 07 09 85 12 43', status: 'Inscrit', matricule: 'M-2026-9981', matriculeNat: 'CI-0125-1109C', photo: '', city: 'Bingerville', lv2: 'Espagnol', birthCertNumber: '112/2012', birthCertDate: '2012-11-12', birthCertPlace: 'Bingerville' },
+      { id: 'std_4', firstName: 'Sylla', lastName: 'Ibrahim Karim', gender: 'M', birthDate: '2010-01-30', classId: '3B', tutorName: 'Sylla Fatoumata', tutorPhone: '+225 01 02 03 04 05', status: 'Réinscrit', matricule: 'M-2023-0056', matriculeNat: 'CI-0123-5591I', photo: '', city: 'Plateau', lv2: 'Allemand', birthCertNumber: '92/2010', birthCertDate: '2010-02-05', birthCertPlace: 'Plateau' },
+      { id: 'std_5', firstName: 'Gomez', lastName: 'Marie-Chantal Enola', gender: 'F', birthDate: '2008-07-21', classId: '3A', tutorName: 'Gomez Robert (Ambass.)', tutorPhone: '+225 07 41 02 85 96', status: 'Inscrit', matricule: 'M-2026-0103', matriculeNat: 'CI-0125-0044E', photo: '', city: 'Cocody Riviera', lv2: 'Espagnol', birthCertNumber: '401/2008', birthCertDate: '2008-07-28', birthCertPlace: 'Cocody' }
     ];
   });
 
@@ -83,8 +86,46 @@ export default function StudentModule({
     city: 'Abidjan',
     matriculeNat: '',
     photo: '',
-    lv2: 'Aucun'
+    lv2: 'Aucun',
+    birthCertNumber: '',
+    birthCertDate: '',
+    birthCertPlace: ''
   });
+
+  // Edit student state
+  const [editingStudent, setEditingStudent] = useState<StudentRecord | null>(null);
+  const [editForm, setEditForm] = useState<StudentRecord | null>(null);
+
+  useEffect(() => {
+    if (editingStudent) {
+      setEditForm({ ...editingStudent });
+    } else {
+      setEditForm(null);
+    }
+  }, [editingStudent]);
+
+  const handleSaveStudentEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editForm) return;
+
+    if (!editForm.firstName.trim() || !editForm.lastName.trim()) {
+      alert("Veuillez renseigner le nom et le prénom de l'élève !");
+      return;
+    }
+
+    const updatedList = students.map(s => s.id === editForm.id ? {
+      ...editForm,
+      firstName: editForm.firstName.trim(),
+      lastName: editForm.lastName.trim().toUpperCase(),
+      tutorName: editForm.tutorName.trim() || "Tuteur Non Renseigné",
+      tutorPhone: editForm.tutorPhone.trim() || "+225 00 00 00 00 00",
+      city: editForm.city.trim() || "Abidjan"
+    } : s);
+
+    setStudents(updatedList);
+    setEditingStudent(null);
+    alert("Dossier élève mis à jour avec succès !");
+  };
 
   // Autosave
   useEffect(() => {
@@ -117,7 +158,10 @@ export default function StudentModule({
       matriculeNat: generatedMatriculeNat,
       photo: enrollForm.photo,
       city: enrollForm.city.trim() || "Abidjan",
-      lv2: enrollForm.lv2 || 'Aucun'
+      lv2: enrollForm.lv2 || 'Aucun',
+      birthCertNumber: enrollForm.birthCertNumber.trim(),
+      birthCertDate: enrollForm.birthCertDate,
+      birthCertPlace: enrollForm.birthCertPlace.trim()
     };
 
     setStudents(prev => [newStudent, ...prev]);
@@ -137,7 +181,10 @@ export default function StudentModule({
       city: 'Abidjan',
       matriculeNat: '',
       photo: '',
-      lv2: 'Aucun'
+      lv2: 'Aucun',
+      birthCertNumber: '',
+      birthCertDate: '',
+      birthCertPlace: ''
     });
     
     // Redirect to list
@@ -283,7 +330,12 @@ export default function StudentModule({
                     filteredStudents.map(std => {
                       const matchedClass = classes.find(c => c.id === std.classId);
                       return (
-                        <tr key={std.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition">
+                        <tr 
+                          key={std.id} 
+                          onClick={() => setEditingStudent(std)}
+                          className="border-b border-slate-100 hover:bg-slate-50/50 transition cursor-pointer"
+                          title="Cliquez pour modifier le dossier de cet élève"
+                        >
                           
                           {/* Matricules Local & National */}
                           <td className="p-4 font-mono">
@@ -312,7 +364,14 @@ export default function StudentModule({
                                     </span>
                                   )}
                                 </div>
-                                <span className="text-[10px] text-slate-400 font-semibold block">Né le {new Date(std.birthDate).toLocaleDateString('fr-FR', { dateStyle: 'medium' })}</span>
+                                <span className="text-[10px] text-slate-400 font-semibold block">
+                                  Né le {new Date(std.birthDate).toLocaleDateString('fr-FR', { dateStyle: 'medium' })} {std.city ? `à ${std.city}` : ''}
+                                </span>
+                                {std.birthCertNumber && (
+                                  <span className="text-[9.5px] text-indigo-650 font-bold block" title="Acte de Naissance">
+                                    📜 Acte N° {std.birthCertNumber} {std.birthCertDate ? `du ${new Date(std.birthCertDate).toLocaleDateString('fr-FR', { dateStyle: 'short' })}` : ''} {std.birthCertPlace ? `(${std.birthCertPlace})` : ''}
+                                  </span>
+                                )}
                               </div>
                             </div>
                           </td>
@@ -335,7 +394,7 @@ export default function StudentModule({
                           </td>
 
                           {/* Class Reassign quick triggers */}
-                          <td className="p-4 text-center">
+                          <td className="p-4 text-center" onClick={(e) => e.stopPropagation()}>
                             <select 
                               value={std.classId}
                               onChange={(e) => handleUpdateStudentClass(std.id, e.target.value)}
@@ -366,7 +425,7 @@ export default function StudentModule({
                           </td>
 
                           {/* Quick action triggers */}
-                          <td className="p-4 text-right">
+                          <td className="p-4 text-right" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center justify-end gap-1.5">
                               <button 
                                 onClick={() => {
@@ -564,6 +623,46 @@ export default function StudentModule({
                   onChange={(e) => setEnrollForm(prev => ({ ...prev, city: e.target.value }))}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none"
                 />
+              </div>
+            </div>
+
+            {/* Acte de Naissance Details Grid */}
+            <div className="p-4 bg-slate-50/50 border border-slate-200/60 rounded-2xl space-y-3">
+              <span className="text-[11px] font-black uppercase text-[#0b4998] tracking-wider flex items-center gap-1.5">
+                <span>📜 Acte de Naissance (Date et lieu d'établissement)</span>
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500">N° Acte de Naissance</label>
+                  <input 
+                    type="text" 
+                    placeholder="Ex: 1024/2014" 
+                    value={enrollForm.birthCertNumber}
+                    onChange={(e) => setEnrollForm(prev => ({ ...prev, birthCertNumber: e.target.value }))}
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500">Date d'établissement</label>
+                  <input 
+                    type="date" 
+                    value={enrollForm.birthCertDate}
+                    onChange={(e) => setEnrollForm(prev => ({ ...prev, birthCertDate: e.target.value }))}
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500">Lieu d'établissement</label>
+                  <input 
+                    type="text" 
+                    placeholder="Ex: Cocody" 
+                    value={enrollForm.birthCertPlace}
+                    onChange={(e) => setEnrollForm(prev => ({ ...prev, birthCertPlace: e.target.value }))}
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none"
+                  />
+                </div>
               </div>
             </div>
 
@@ -885,6 +984,13 @@ export default function StudentModule({
                     <span className="text-[11px] uppercase font-bold text-slate-400 block">Date et Ville de naissance :</span>
                     <span className="text-xs font-semibold text-slate-800">
                       Le {new Date(selectedStudentObj.birthDate).toLocaleDateString('fr-FR', { dateStyle: 'long' })} à {selectedStudentObj.city}
+                      {selectedStudentObj.birthCertNumber && (
+                        <>
+                          , sous le N° d'acte de naissance <strong>{selectedStudentObj.birthCertNumber}</strong>
+                          {selectedStudentObj.birthCertDate && ` établi le ${new Date(selectedStudentObj.birthCertDate).toLocaleDateString('fr-FR', { dateStyle: 'long' })}`}
+                          {selectedStudentObj.birthCertPlace && ` à ${selectedStudentObj.birthCertPlace}`}
+                        </>
+                      )}
                     </span>
                   </div>
                   <div>
@@ -929,6 +1035,324 @@ export default function StudentModule({
             <span className="text-slate-400 italic">Veuillez inscrire un élève pour générer ses actes officiels.</span>
           )}
 
+        </div>
+      )}
+
+      {/* RENDER MODAL: EDIT STUDENT */}
+      {editingStudent && editForm && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-3xl w-full p-6 space-y-6 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
+            
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-150">
+              <div>
+                <h3 className="text-base font-black text-[#0b4998] flex items-center gap-1.5">
+                  <span>📝 Modifier le Dossier Élève</span>
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Modifiez les informations administratives et scolaires du dossier de l'élève.
+                </p>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setEditingStudent(null)}
+                className="text-slate-400 hover:text-slate-655 cursor-pointer p-1.5 rounded-lg hover:bg-slate-100 transition"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveStudentEdit} className="space-y-4">
+              
+              {/* PHOTO UPLOAD ZONE */}
+              <div className="space-y-1 bg-slate-50/50 p-4 rounded-2xl border border-slate-150 shadow-inner">
+                <label className="text-xs font-black text-slate-700 block uppercase tracking-wider mb-2">📸 Photo d'Identité Scolaire</label>
+                <div className="flex flex-col sm:flex-row items-center gap-4">
+                  <div className="w-20 h-24 bg-white rounded-xl border border-slate-300 overflow-hidden flex items-center justify-center shrink-0 shadow-md relative">
+                    {editForm.photo ? (
+                      <img src={editForm.photo} alt="Aperçu" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="text-slate-400 text-center flex flex-col items-center">
+                        <span className="text-3xl block">👤</span>
+                        <span className="text-[8px] font-black uppercase tracking-wider block mt-1">Aucune photo</span>
+                      </div>
+                    )}
+                    {editForm.photo && (
+                      <div className="absolute top-1 right-1 bg-emerald-500 text-white p-0.5 rounded-full shadow">
+                        <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="flex-1 w-full">
+                    <div 
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const file = e.dataTransfer.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (event) => {
+                            if (event.target?.result) {
+                              setEditForm(prev => prev ? ({ ...prev, photo: event.target!.result as string }) : null);
+                            }
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                      onClick={() => document.getElementById('edit-photo-picker')?.click()}
+                      className="border-2 border-dashed border-slate-300 hover:border-[#0b4998] hover:bg-slate-50/50 p-4 rounded-xl text-center cursor-pointer transition flex flex-col items-center justify-center min-h-[90px]"
+                    >
+                      <span className="text-[11px] font-black text-[#0b4998]">Glissez-déposez le fichier image ou cliquez pour parcourir</span>
+                      <span className="text-[9px] font-bold text-slate-400 mt-1">Recommandé : Portrait ratio 3:4 (max 1.5 Mo)</span>
+                      <input 
+                        id="edit-photo-picker"
+                        type="file" 
+                        accept="image/*"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onload = (event) => {
+                              if (event.target?.result) {
+                                setEditForm(prev => prev ? ({ ...prev, photo: event.target!.result as string }) : null);
+                              }
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                        className="hidden" 
+                      />
+                    </div>
+                    {editForm.photo && (
+                      <button 
+                        type="button"
+                        onClick={() => setEditForm(prev => prev ? ({ ...prev, photo: '' }) : null)}
+                        className="mt-2 text-[10px] font-black text-rose-500 hover:text-rose-700 transition uppercase tracking-wide flex items-center gap-1 cursor-pointer"
+                      >
+                        <span>❌ Retirer la photo</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Identity fields */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500">Prénom(s)</label>
+                  <input 
+                    type="text" 
+                    required
+                    value={editForm.firstName}
+                    onChange={(e) => setEditForm(prev => prev ? ({ ...prev, firstName: e.target.value }) : null)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:bg-white"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500">Nom de famille</label>
+                  <input 
+                    type="text" 
+                    required
+                    value={editForm.lastName}
+                    onChange={(e) => setEditForm(prev => prev ? ({ ...prev, lastName: e.target.value }) : null)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:bg-white"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500">Genre</label>
+                  <select 
+                    value={editForm.gender}
+                    onChange={(e) => setEditForm(prev => prev ? ({ ...prev, gender: e.target.value as any }) : null)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none"
+                  >
+                    <option value="M">Masculin (M)</option>
+                    <option value="F">Féminin (F)</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500">Date de naissance</label>
+                  <input 
+                    type="date" 
+                    value={editForm.birthDate}
+                    onChange={(e) => setEditForm(prev => prev ? ({ ...prev, birthDate: e.target.value }) : null)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500">Ville de résidence</label>
+                  <input 
+                    type="text" 
+                    value={editForm.city}
+                    onChange={(e) => setEditForm(prev => prev ? ({ ...prev, city: e.target.value }) : null)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Acte de Naissance Details Grid */}
+              <div className="p-4 bg-slate-50/50 border border-slate-200/60 rounded-2xl space-y-3">
+                <span className="text-[11px] font-black uppercase text-[#0b4998] tracking-wider flex items-center gap-1.5">
+                  <span>📜 Acte de Naissance (Date et lieu d'établissement)</span>
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-500">N° Acte de Naissance</label>
+                    <input 
+                      type="text" 
+                      placeholder="Ex: 1024/2014" 
+                      value={editForm.birthCertNumber || ''}
+                      onChange={(e) => setEditForm(prev => prev ? ({ ...prev, birthCertNumber: e.target.value }) : null)}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-500">Date d'établissement</label>
+                    <input 
+                      type="date" 
+                      value={editForm.birthCertDate || ''}
+                      onChange={(e) => setEditForm(prev => prev ? ({ ...prev, birthCertDate: e.target.value }) : null)}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-500">Lieu d'établissement</label>
+                    <input 
+                      type="text" 
+                      placeholder="Ex: Cocody" 
+                      value={editForm.birthCertPlace || ''}
+                      onChange={(e) => setEditForm(prev => prev ? ({ ...prev, birthCertPlace: e.target.value }) : null)}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* School fields */}
+              <div className="grid grid-cols-1 sm:grid-cols-5 gap-4 pb-3 border-b border-slate-100">
+                <div className="space-y-1 col-span-1">
+                  <label className="text-xs font-bold text-slate-500">Classe</label>
+                  <select 
+                    value={editForm.classId}
+                    onChange={(e) => setEditForm(prev => prev ? ({ ...prev, classId: e.target.value }) : null)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-[#dee2e6] rounded-xl text-xs font-bold focus:outline-none"
+                  >
+                    {classes.map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1 col-span-1">
+                  <label className="text-xs font-bold text-slate-500">Statut</label>
+                  <select 
+                    value={editForm.status}
+                    onChange={(e) => setEditForm(prev => prev ? ({ ...prev, status: e.target.value as any }) : null)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-[#dee2e6] rounded-xl text-xs font-bold focus:outline-none"
+                  >
+                    <option value="Inscrit">Inscrit</option>
+                    <option value="Réinscrit">Réinscrit</option>
+                    <option value="Suspendu">Suspendu</option>
+                    <option value="Diplômé">Diplômé</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1 col-span-1">
+                  <label className="text-xs font-bold text-slate-500">LV2</label>
+                  <select 
+                    value={editForm.lv2 || 'Aucun'}
+                    onChange={(e) => setEditForm(prev => prev ? ({ ...prev, lv2: e.target.value }) : null)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-[#dee2e6] rounded-xl text-xs font-bold focus:outline-none"
+                  >
+                    <option value="Aucun">Aucune</option>
+                    <option value="Espagnol">Espagnol</option>
+                    <option value="Allemand">Allemand</option>
+                    <option value="Italien">Italien</option>
+                    <option value="Arabe">Arabe</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1 col-span-1">
+                  <label className="text-xs font-bold text-slate-500">Matricule Local</label>
+                  <input 
+                    type="text" 
+                    disabled
+                    value={editForm.matricule}
+                    className="w-full px-3 py-2 bg-slate-200 border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-500 cursor-not-allowed"
+                  />
+                </div>
+
+                <div className="space-y-1 col-span-1">
+                  <label className="text-xs font-bold text-slate-500">Matricule National</label>
+                  <input 
+                    type="text" 
+                    value={editForm.matriculeNat || ''}
+                    onChange={(e) => setEditForm(prev => prev ? ({ ...prev, matriculeNat: e.target.value }) : null)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Tutor fields */}
+              <div className="space-y-3">
+                <span className="text-[11px] font-black uppercase text-slate-400 tracking-wider">Responsable Tuteur</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-500">Nom Complet du Tuteur</label>
+                    <input 
+                      type="text" 
+                      required
+                      value={editForm.tutorName}
+                      onChange={(e) => setEditForm(prev => prev ? ({ ...prev, tutorName: e.target.value }) : null)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:bg-white"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-500">Téléphone Mobile Tuteur</label>
+                    <input 
+                      type="text" 
+                      required
+                      value={editForm.tutorPhone}
+                      onChange={(e) => setEditForm(prev => prev ? ({ ...prev, tutorPhone: e.target.value }) : null)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:bg-white"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Actions */}
+              <div className="pt-4 flex justify-end gap-3 border-t border-slate-150">
+                <button 
+                  type="button" 
+                  onClick={() => setEditingStudent(null)}
+                  className="cursor-pointer px-4.5 py-2 hover:bg-slate-100 text-slate-655 rounded-xl text-xs font-bold transition border border-slate-200"
+                >
+                  Annuler
+                </button>
+                <button 
+                  type="submit"
+                  className="cursor-pointer px-5 py-2 bg-[#0b4998] hover:bg-[#093d80] text-white font-extrabold text-xs rounded-xl flex items-center gap-1.5 transition shadow-sm"
+                >
+                  <Check className="h-4 w-4" />
+                  Sauvegarder les modifications
+                </button>
+              </div>
+
+            </form>
+          </div>
         </div>
       )}
 
