@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Users, 
   BookOpen, 
@@ -181,6 +181,176 @@ export default function TeacherErpModule({
     monthlyBaseSalary: 350000,
     selectedSubjects: [] as string[]
   });
+
+  // Editing teacher state
+  const [editingTeacher, setEditingTeacher] = useState<TeacherItem | null>(null);
+  const [editForm, setEditForm] = useState<{
+    id: string;
+    name: string;
+    email: string;
+    phone: string;
+    maxHours: number;
+    color: string;
+    contractType: 'Permanent (CDI)' | 'Vacataire (Horaire)' | 'CDD Temporaire';
+    monthlyBaseSalary: number;
+    selectedSubjects: string[];
+    hiredDate: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (editingTeacher) {
+      const ext = extendedData[editingTeacher.id] || { phone: '', contractType: 'Permanent (CDI)' as any, monthlyBaseSalary: 350000, hiredDate: new Date().toISOString().split('T')[0] };
+      setEditForm({
+        id: editingTeacher.id,
+        name: editingTeacher.name,
+        email: editingTeacher.email || '',
+        phone: ext.phone || '',
+        maxHours: editingTeacher.maxHoursPerWeek,
+        color: editingTeacher.color,
+        contractType: ext.contractType as any,
+        monthlyBaseSalary: ext.monthlyBaseSalary,
+        selectedSubjects: [...editingTeacher.subjects],
+        hiredDate: ext.hiredDate || new Date().toISOString().split('T')[0]
+      });
+    } else {
+      setEditForm(null);
+    }
+  }, [editingTeacher, extendedData]);
+
+  const handleSaveTeacherEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editForm) return;
+
+    if (!editForm.name.trim()) {
+      alert("Le nom de l'enseignant est obligatoire !");
+      return;
+    }
+
+    // Update central teachers list
+    setTeachers(prev => {
+      const updated = prev.map(t => t.id === editForm.id ? {
+        ...t,
+        name: editForm.name.trim(),
+        email: editForm.email.trim() || undefined,
+        maxHoursPerWeek: editForm.maxHours,
+        color: editForm.color,
+        subjects: editForm.selectedSubjects.length > 0 ? editForm.selectedSubjects : t.subjects
+      } : t);
+      localStorage.setItem('barakatplanning_teachers', JSON.stringify(updated));
+      return updated;
+    });
+
+    // Update extended administrative data
+    const updatedExt = {
+      ...extendedData,
+      [editForm.id]: {
+        teacherId: editForm.id,
+        phone: editForm.phone.trim() || "+225 00 00 00 00 00",
+        contractType: editForm.contractType,
+        monthlyBaseSalary: editForm.monthlyBaseSalary,
+        hiredDate: editForm.hiredDate
+      }
+    };
+    saveExtended(updatedExt);
+
+    setEditingTeacher(null);
+    alert("Dossier enseignant mis à jour avec succès !");
+  };
+
+  const handleGenerateContractPDF = (teacher: TeacherItem) => {
+    const ext = extendedData[teacher.id] || { phone: '+225 00 00 00 00', contractType: 'Permanent (CDI)', monthlyBaseSalary: 350000, hiredDate: 'En cours' };
+    const schoolName = localStorage.getItem('barakat_school_name') || "ÉCOLE DES FAMILLES";
+    const academicYear = localStorage.getItem('barakat_academic_year') || "2025-2026";
+    const director = localStorage.getItem('barakat_school_director') || "La Direction";
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const formattedMonthlySalary = ext.monthlyBaseSalary.toLocaleString();
+    const hireDate = ext.hiredDate !== 'En cours' ? new Date(ext.hiredDate).toLocaleDateString('fr-FR', { dateStyle: 'long' }) : 'non spécifiée';
+    const teacherSubjects = teacher.subjects.map(sid => subjects.find(sub => sub.id === sid)?.name || sid).join(', ');
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Contrat de Travail - ${teacher.name}</title>
+          <style>
+            body { font-family: 'Times New Roman', serif; padding: 40px; color: #111827; line-height: 1.6; max-width: 800px; margin: 0 auto; }
+            .header { text-align: center; margin-bottom: 40px; border-bottom: 3px double #000; padding-bottom: 15px; }
+            .school-name { font-size: 24px; font-weight: bold; text-transform: uppercase; color: #0b4998; }
+            .school-motto { font-style: italic; font-size: 13px; color: #4b5563; }
+            .contract-title { font-size: 20px; font-weight: bold; text-align: center; text-transform: uppercase; margin: 30px 0; text-decoration: underline; }
+            .section-title { font-size: 14px; font-weight: bold; text-transform: uppercase; border-bottom: 1px solid #000; margin-top: 25px; margin-bottom: 10px; }
+            .content { font-size: 12px; text-align: justify; }
+            .parties { margin-bottom: 20px; }
+            .signatures { margin-top: 50px; display: flex; justify-content: space-between; }
+            .signature-block { text-align: center; width: 45%; }
+            .signature-space { height: 100px; border-bottom: 1px dashed #000; margin-bottom: 10px; }
+            @media print {
+              body { padding: 20px; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="school-name">${schoolName}</div>
+            <div class="school-motto">Année Scolaire ${academicYear}</div>
+            <div style="font-size: 11px; margin-top: 5px; font-weight: bold;">FICHE INDIVIDUELLE & CONTRAT PROFESSIONNEL</div>
+          </div>
+
+          <div class="contract-title">CONTRAT DE TRAVAIL - ENSEIGNANT</div>
+
+          <div class="content">
+            <div class="parties">
+              <strong>ENTRE LES SOUSSIGNÉS :</strong><br/>
+              <strong>L'Établissement :</strong> ${schoolName}, représenté par son Directeur <strong>${director}</strong>, ci-après désigné "L'Employeur", d'une part,<br/>
+              <strong>Et l'Enseignant :</strong> <strong>${teacher.name}</strong>, de spécialité(s) <strong>${teacherSubjects}</strong>, domicilié à l'adresse e-mail <strong>${teacher.email || 'Non spécifiée'}</strong>, Téléphone : <strong>${ext.phone}</strong>, ci-après désigné "L'Employé", d'autre part.
+            </div>
+
+            <p>Il a été convenu et arrêté ce qui suit :</p>
+
+            <div class="section-title">Article 1 : Objet du Contrat & Engagement</div>
+            <p>L'Employeur recrute L'Employé en qualité d'enseignant sous le régime contractuel de type <strong>${ext.contractType}</strong> pour dispenser des cours de <strong>${teacherSubjects}</strong> au titre de l'année scolaire en cours. L'Employé s'engage à accomplir ses cours avec professionnalisme et ponctualité, conformément à l'emploi du temps qui lui sera transmis.</p>
+
+            <div class="section-title">Article 2 : Durée & Date d'Effet</div>
+            <p>Le présent contrat prend effet à compter du <strong>${hireDate}</strong>. Sa durée est liée aux spécifications légales du statut de <strong>${ext.contractType}</strong>.</p>
+
+            <div class="section-title">Article 3 : Rémunération & Traitement</div>
+            <p>En contrepartie de l'accomplissement de ses tâches académiques, L'Employé percevra un traitement de base mensuel forfaitaire de <strong>${formattedMonthlySalary} FCFA</strong>. Pour les contrats vacataires, ce barème pourra être modulé en fonction des heures effectivement prestées à la fin de chaque mois.</p>
+
+            <div class="section-title">Article 4 : Obligations Professionnelles</div>
+            <p>L'Employé s'engage à respecter les règlements intérieurs de l'établissement, à assister aux conseils des professeurs et à consigner régulièrement les notes et évaluations des élèves sous sa charge. La charge hebdomadaire maximale autorisée est fixée à <strong>${teacher.maxHoursPerWeek} heures</strong>.</p>
+
+            <div class="section-title">Article 5 : Résiliation</div>
+            <p>Chacune des parties pourra mettre fin au présent engagement sous réserve des préavis légaux applicables au contrat de type ${ext.contractType}.</p>
+
+            <p style="text-align: right; margin-top: 30px;">Fait à Abidjan, le ${new Date().toLocaleDateString('fr-FR', { dateStyle: 'long' })}</p>
+
+            <div class="signatures">
+              <div class="signature-block">
+                <strong>L'Employé(e)</strong><br/>
+                <span style="font-size: 10px; color: #555;">(Précédé de la mention "Lu et approuvé")</span>
+                <div class="signature-space"></div>
+              </div>
+              <div class="signature-block">
+                <strong>L'Employeur</strong><br/>
+                <span style="font-size: 10px; color: #555;">Le Directeur ${director}</span>
+                <div class="signature-space"></div>
+              </div>
+            </div>
+          </div>
+
+          <script>
+            window.onload = function() {
+              window.print();
+              setTimeout(function() { window.close(); }, 500);
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
 
   // Attendance checking state
   const [teacherDailyAttendance, setTeacherDailyAttendance] = useState<Record<string, 'present' | 'late' | 'absent'>>(() => {
@@ -583,6 +753,24 @@ export default function TeacherErpModule({
                       </div>
                     </div>
 
+                    {/* Action buttons row */}
+                    <div className="flex gap-2 pt-2.5 border-t border-slate-200/65">
+                      <button
+                        onClick={() => handleGenerateContractPDF(t)}
+                        className="cursor-pointer flex-1 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-[10px] font-black uppercase transition flex items-center justify-center gap-1"
+                        title="Imprimer la fiche sous forme de contrat"
+                      >
+                        📄 Fiche Contrat
+                      </button>
+                      <button
+                        onClick={() => setEditingTeacher(t)}
+                        className="cursor-pointer flex-1 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-305 rounded-xl text-[10px] font-black uppercase transition flex items-center justify-center gap-1"
+                        title="Modifier l'enseignant"
+                      >
+                        ✏️ Modifier
+                      </button>
+                    </div>
+
                   </div>
                 );
               })}
@@ -707,6 +895,192 @@ export default function TeacherErpModule({
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* RENDER MODAL: EDIT TEACHER */}
+      {editingTeacher && editForm && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-xl w-full p-6 space-y-6 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
+            
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-150">
+              <div>
+                <h3 className="text-base font-black text-[#0b4998] flex items-center gap-1.5">
+                  <span>📝 Modifier le Dossier Enseignant</span>
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Modifiez les données contractuelles et administratives de l'enseignant.
+                </p>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setEditingTeacher(null)}
+                className="text-slate-400 hover:text-slate-655 cursor-pointer p-1.5 rounded-lg hover:bg-slate-100 transition"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveTeacherEdit} className="space-y-4">
+              
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase">Identifiant unique (Lecture seule)</label>
+                <input 
+                  type="text" 
+                  disabled
+                  value={editForm.id}
+                  className="w-full px-3 py-1.5 bg-slate-200 border border-slate-350 rounded-xl text-xs font-mono font-bold text-slate-500 cursor-not-allowed"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase">Nom complet & titre</label>
+                <input 
+                  type="text" 
+                  required
+                  value={editForm.name}
+                  onChange={(e) => setEditForm(prev => prev ? ({ ...prev, name: e.target.value }) : null)}
+                  className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:bg-white"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase">Courriel professionnel</label>
+                <input 
+                  type="email" 
+                  value={editForm.email}
+                  onChange={(e) => setEditForm(prev => prev ? ({ ...prev, email: e.target.value }) : null)}
+                  className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:bg-white"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase">Téléphone Mobile</label>
+                  <input 
+                    type="text" 
+                    value={editForm.phone}
+                    onChange={(e) => setEditForm(prev => prev ? ({ ...prev, phone: e.target.value }) : null)}
+                    className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:bg-white"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase">Charge Max (heures/sem.)</label>
+                  <input 
+                    type="number" 
+                    min="1" 
+                    max="40" 
+                    value={editForm.maxHours}
+                    onChange={(e) => setEditForm(prev => prev ? ({ ...prev, maxHours: parseInt(e.target.value) || 18 }) : null)}
+                    className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:bg-white"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-[#ee7b11] uppercase">Type de Contrat</label>
+                  <select
+                    value={editForm.contractType}
+                    onChange={(e) => setEditForm(prev => prev ? ({ ...prev, contractType: e.target.value as any }) : null)}
+                    className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none"
+                  >
+                    <option value="Permanent (CDI)">Permanent (CDI)</option>
+                    <option value="Vacataire (Horaire)">Vacataire (Horaire)</option>
+                    <option value="CDD Temporaire">CDD Temporaire</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase">Salaire Base (FCFA)</label>
+                  <input 
+                    type="number" 
+                    value={editForm.monthlyBaseSalary}
+                    onChange={(e) => setEditForm(prev => prev ? ({ ...prev, monthlyBaseSalary: parseInt(e.target.value) || 150000 }) : null)}
+                    className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:bg-white"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase">Date de recrutement</label>
+                  <input 
+                    type="date" 
+                    value={editForm.hiredDate}
+                    onChange={(e) => setEditForm(prev => prev ? ({ ...prev, hiredDate: e.target.value }) : null)}
+                    className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:bg-white"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase block">Couleur</label>
+                  <select
+                    value={editForm.color}
+                    onChange={(e) => setEditForm(prev => prev ? ({ ...prev, color: e.target.value }) : null)}
+                    className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none"
+                  >
+                    <option value="indigo">Indigo</option>
+                    <option value="emerald">Vert Émeraude</option>
+                    <option value="teal">Sarcelle (Teal)</option>
+                    <option value="rose">Rose</option>
+                    <option value="amber">Ambre</option>
+                    <option value="violet">Violet</option>
+                    <option value="slate">Ardoise</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Subject qualification checkboxes list */}
+              <div className="space-y-1.5 pt-1.5 border-t border-slate-100">
+                <label className="text-[10px] font-bold text-slate-400 uppercase block">Matières de spécialisation</label>
+                <div className="flex flex-wrap gap-1.5 max-h-[85px] overflow-y-auto pt-1">
+                  {subjects.map(s => {
+                    const isSelected = editForm.selectedSubjects.includes(s.id);
+                    return (
+                      <button
+                        type="button"
+                        key={s.id}
+                        onClick={() => {
+                          setEditForm(prev => {
+                            if (!prev) return null;
+                            const exists = prev.selectedSubjects.includes(s.id);
+                            const next = exists 
+                              ? prev.selectedSubjects.filter(id => id !== s.id)
+                              : [...prev.selectedSubjects, s.id];
+                            return { ...prev, selectedSubjects: next };
+                          });
+                        }}
+                        className={`cursor-pointer px-2 py-1 border rounded-lg text-[10px] font-bold transition ${
+                          isSelected ? 'bg-indigo-600 text-white border-indigo-650' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                        }`}
+                      >
+                        {s.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Modal Actions */}
+              <div className="pt-4 flex justify-end gap-3 border-t border-slate-150">
+                <button 
+                  type="button" 
+                  onClick={() => setEditingTeacher(null)}
+                  className="cursor-pointer px-4.5 py-2 hover:bg-slate-100 text-slate-655 rounded-xl text-xs font-bold transition border border-slate-200"
+                >
+                  Annuler
+                </button>
+                <button 
+                  type="submit"
+                  className="cursor-pointer px-5 py-2 bg-[#ee7b11] hover:bg-[#d66f0e] text-white font-extrabold text-xs rounded-xl flex items-center justify-center gap-1.5 transition shadow-sm"
+                >
+                  <Check className="h-4 w-4" />
+                  Sauvegarder les modifications
+                </button>
+              </div>
+
+            </form>
           </div>
         </div>
       )}
